@@ -357,6 +357,23 @@ async def whale_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup([chain_buttons[:2], chain_buttons[2:]]),
         disable_web_page_preview=True)
 
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if data.startswith("watch:"):
+        _, address, chain = data.split(":")
+        chat_id = update.effective_chat.id
+        if chat_id not in watchlist: watchlist[chat_id] = []
+        if not any(w["address"].lower()==address.lower() for w in watchlist[chat_id]):
+            watchlist[chat_id].append({"address":address,"label":address[:8]+"...","chain":chain})
+            await context.bot.send_message(chat_id, "📋 *Subpoena issued.* Suspect added to court docket. 🔨", parse_mode="Markdown")
+        else:
+            await context.bot.send_message(chat_id, "⚠️ Already under surveillance.")
+    elif data.startswith("whale:"):
+        context.args = [data.split(":")[1]]
+        await whale_command(update, context)
+
 async def mantle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     wait = await update.message.reply_text(
         "🟢 *Mantle Ecosystem — Loading...*\n🔍 Fetching live data from DeFiLlama & Mantle RPC...",
