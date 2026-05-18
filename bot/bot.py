@@ -22,7 +22,7 @@ CHAINS = {
     "arbitrum":  {"name":"Arbitrum",    "emoji":"🔷","moralis_chain":"arbitrum", "explorer":"https://arbiscan.io",               "symbol":"ETH",  "whale_threshold":100000},
     "optimism":  {"name":"Optimism",    "emoji":"🔴","moralis_chain":"optimism", "explorer":"https://optimistic.etherscan.io",   "symbol":"ETH",  "whale_threshold":100000},
     "base":      {"name":"Base",        "emoji":"🟦","moralis_chain":"base",     "explorer":"https://basescan.org",              "symbol":"ETH",  "whale_threshold":100000},
-    "mantle":    {"name":"Mantle",      "emoji":"🟢","moralis_chain":"mantle",   "explorer":"https://explorer.mantle.xyz",       "symbol":"MNT",  "whale_threshold":10000},
+    "mantle":    {"name":"Mantle",      "emoji":"🟢","moralis_chain":"mantle",   "explorer":"https://mantlescan.xyz",            "symbol":"MNT",  "whale_threshold":10000},
     "avalanche": {"name":"Avalanche",   "emoji":"🔺","moralis_chain":"avalanche","explorer":"https://snowtrace.io",              "symbol":"AVAX", "whale_threshold":100000},
 }
 
@@ -158,6 +158,7 @@ _The On-Chain Tribunal. Every wallet gets judged._
 *Commands:*
 ⚖️ `/scan` `/judge` `<address> [chain]` — Summon wallet to court
 🐋 `/whale` `/suspect` `[chain]` — View whale suspects
+🟢 `/mantle` — Mantle ecosystem live data (TVL, protocols, gas)
 👁 `/watch` `/subpoena` `<address> [label]` — Issue surveillance order
 📋 `/watchlist` `/docket` — View active cases
 ❌ `/unwatch` `<address>` — Dismiss case
@@ -356,7 +357,118 @@ async def whale_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup([chain_buttons[:2], chain_buttons[2:]]),
         disable_web_page_preview=True)
 
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def mantle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    wait = await update.message.reply_text(
+        "🟢 *Mantle Ecosystem — Loading...*\n🔍 Fetching live data from DeFiLlama & Mantle RPC...",
+        parse_mode="Markdown")
+
+    # 并发获取数据
+    async def get_mantle_tvl():
+        try:
+            async with aiohttp.ClientSession(trust_env=False) as s:
+                async with s.get("https://api.llama.fi/v2/chains", timeout=aiohttp.ClientTimeout(total=10)) as r:
+                    if r.status == 200:
+                        chains = await r.json()
+                        for c in chains:
+                            if c.get("name","").lower() == "mantle":
+                                return c
+        except Exception as e:
+            print(f"DeFiLlama chains error: {e}")
+        return {}
+
+    async def get_mantle_protocols():
+        try:
+            async with aiohttp.ClientSession(trust_env=False) as s:
+                async with s.get("https://api.llama.fi/protocols", timeout=aiohttp.ClientTimeout(total=10)) as r:
+                    if r.status == 200:
+                        all_p = await r.json()
+                        mantle_p = [p for p in all_p if "mantle" in [c.lower() for c in p.get("chains", [])]]
+                        return sorted(mantle_p, key=lambda x: x.get("tvl", 0), reverse=True)[:5]
+        except Exception as e:
+            print(f"DeFiLlama protocols error: {e}")
+        return []
+
+    async def get_mantle_rpc():
+        try:
+            async with aiohttp.ClientSession(trust_env=False) as s:
+                async with s.post("https://rpc.mantle.xyz",
+                    json={"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1},
+                    timeout=aiohttp.ClientTimeout(total=8)) as r:
+                    if r.status == 200:
+                        d = await r.json()
+                        return int(d.get("result","0x0"), 16)
+        except Exception as e:
+            print(f"Mantle RPC error: {e}")
+        return None
+
+    async def get_mantle_gas():
+        try:
+            async with aiohttp.ClientSession(trust_env=False) as s:
+                async with s.post("https://rpc.mantle.xyz",
+                    json={"jsonrpc":"2.0","method":"eth_gasPrice","params":[],"id":1},
+                    timeout=aiohttp.ClientTimeout(total=8)) as r:
+                    if r.status == 200:
+                        d = await r.json()
+                        gwei = int(d.get("result","0x0"), 16) / 1e9
+                        return gwei
+        except Exception as e:
+            print(f"Mantle gas error: {e}")
+        return None
+
+    tvl_data, protocols, block_num, gas = await asyncio.gather(
+        get_mantle_tvl(), get_mantle_protocols(), get_mantle_rpc(), get_mantle_gas()
+    )
+
+    # 格式化TVL
+    tvl = tvl_data.get("tvl", 0)
+    tvl_change = tvl_data.get("change_1d", 0) or 0
+    if tvl >= 1e9:
+        tvl_fmt = f"${tvl/1e9:.2f}B"
+    elif tvl >= 1e6:
+        tvl_fmt = f"${tvl/1e6:.2f}M"
+    else:
+        tvl_fmt = f"${tvl:,.0f}"
+    change_emoji = "📈" if tvl_change >= 0 else "📉"
+    change_fmt = f"{'+' if tvl_change >= 0 else ''}{tvl_change:.2f}%"
+
+    # 协议列表
+    proto_lines = []
+    for i, p in enumerate(protocols, 1):
+        ptv = p.get("tvl", 0)
+        if ptv >= 1e6:
+            ptv_fmt = f"${ptv/1e6:.1f}M"
+        else:
+            ptv_fmt = f"${ptv:,.0f}"
+        proto_lines.append(f"  {i}. *{p.get('name','?')}* — `{ptv_fmt}`")
+
+    # 网络状态
+    network_lines = []
+    if block_num:
+        network_lines.append(f"  📦 Latest Block: `{block_num:,}`")
+    if gas is not None:
+        network_lines.append(f"  ⛽ Gas Price: `{gas:.4f} Gwei`")
+
+    report = f"""🟢 *MANTLE ECOSYSTEM REPORT*
+━━━━━━━━━━━━━━━━━━━
+📊 *Total Value Locked*
+  💰 `{tvl_fmt}` {change_emoji} `{change_fmt}` (24h)
+━━━━━━━━━━━━━━━━━━━
+🏆 *Top Protocols on Mantle*
+{chr(10).join(proto_lines) if proto_lines else "  _No data available_"}
+━━━━━━━━━━━━━━━━━━━
+🌐 *Network Status*
+{chr(10).join(network_lines) if network_lines else "  _RPC unavailable_"}
+━━━━━━━━━━━━━━━━━━━
+[🔍 MantleScan](https://mantlescan.xyz) · [🌉 Bridge](https://app.mantle.xyz/bridge) · [⚖️ verdictprotocol.online](https://verdictprotocol.online)"""
+
+    await wait.delete()
+    await update.message.reply_text(report, parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔍 MantleScan", url="https://mantlescan.xyz"),
+            InlineKeyboardButton("🌉 Bridge", url="https://app.mantle.xyz/bridge"),
+        ]]), disable_web_page_preview=True)
+
+
     query = update.callback_query
     await query.answer()
     data = query.data
@@ -425,6 +537,7 @@ def main():
     for cmd in ["watch","subpoena"]: app.add_handler(CommandHandler(cmd, watch_command))
     for cmd in ["watchlist","docket"]: app.add_handler(CommandHandler(cmd, watchlist_command))
     for cmd in ["whale","suspect"]: app.add_handler(CommandHandler(cmd, whale_command))
+    app.add_handler(CommandHandler("mantle", mantle_command))
     app.add_handler(CommandHandler("unwatch", unwatch_command))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
