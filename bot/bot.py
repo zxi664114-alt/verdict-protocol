@@ -159,6 +159,7 @@ _The On-Chain Tribunal. Every wallet gets judged._
 ⚖️ `/scan` `/judge` `<address> [chain]` — Summon wallet to court
 🐋 `/whale` `/suspect` `[chain]` — View whale suspects
 🟢 `/mantle` — Mantle ecosystem live data (TVL, protocols, gas)
+💰 `/price` `<token or address>` — Token price & 24h change
 👁 `/watch` `/subpoena` `<address> [label]` — Issue surveillance order
 📋 `/watchlist` `/docket` — View active cases
 ❌ `/unwatch` `<address>` — Dismiss case
@@ -357,6 +358,138 @@ async def whale_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup([chain_buttons[:2], chain_buttons[2:]]),
         disable_web_page_preview=True)
 
+async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args or []
+    if not args:
+        await update.message.reply_text(
+            "Usage:\n`/price MNT` — by token name\n`/price 0x1234...abcd mantle` — by contract address",
+            parse_mode="Markdown")
+        return
+
+    wait = await update.message.reply_text("💰 *Fetching price data...*", parse_mode="Markdown")
+
+    query = args[0].strip()
+    is_address = EVM_RE.match(query)
+
+    async def fetch_by_address(addr, chain):
+        chain_key = CHAINS.get(chain, {}).get("moralis_chain", chain)
+        # DeFiLlama chain name mapping
+        llama_chain = {"bsc": "bsc", "eth": "ethereum", "polygon": "polygon",
+                       "arbitrum": "arbitrum", "optimism": "optimism", "base": "base",
+                       "mantle": "mantle", "avalanche": "avax"}.get(chain_key, chain_key)
+        url = f"https://coins.llama.fi/prices/current/{llama_chain}:{addr}"
+        try:
+            async with aiohttp.ClientSession(trust_env=False) as s:
+                async with s.get(url, timeout=aiohttp.ClientTimeout(total=10)) as r:
+                    if r.status == 200:
+                        d = await r.json()
+                        coins = d.get("coins", {})
+                        if coins:
+                            key = list(coins.keys())[0]
+                            return coins[key], key
+        except Exception as e:
+            print(f"Price fetch error: {e}")
+        return None, None
+
+    async def fetch_by_name(name):
+        # Try common tokens first
+        common = {
+            "mnt": "coingecko:mantle", "eth": "coingecko:ethereum",
+            "bnb": "coingecko:binancecoin", "btc": "coingecko:bitcoin",
+            "usdt": "coingecko:tether", "usdc": "coingecko:usd-coin",
+            "matic": "coingecko:matic-network", "avax": "coingecko:avalanche-2",
+        }
+        coin_id = common.get(name.lower())
+        if not coin_id:
+            # Search via DeFiLlama
+            try:
+                async with aiohttp.ClientSession(trust_env=False) as s:
+                    async with s.get(f"https://coins.llama.fi/search?query={name}",
+                                     timeout=aiohttp.ClientTimeout(total=10)) as r:
+                        if r.status == 200:
+                            d = await r.json()
+                            coins = d.get("coins", [])
+                            if coins:
+                                coin_id = coins[0].get("coin", "")
+            except Exception as e:
+                print(f"Search error: {e}")
+        if not coin_id:
+            return None, None
+        try:
+            async with aiohttp.ClientSession(trust_env=False) as s:
+                async with s.get(f"https://coins.llama.fi/prices/current/{coin_id}",
+                                 timeout=aiohttp.ClientTimeout(total=10)) as r:
+                    if r.status == 200:
+                        d = await r.json()
+                        coins = d.get("coins", {})
+                        if coins:
+                            key = list(coins.keys())[0]
+                            return coins[key], key
+        except Exception as e:
+            print(f"Price by name error: {e}")
+        return None, None
+
+    # Fetch data
+    if is_address:
+        chain = "mantle"
+        if len(args) > 1:
+            raw = args[1].lower()
+            chain = CHAIN_ALIASES.get(raw, raw) if raw in CHAIN_ALIASES or raw in CHAINS else "mantle"
+        data, coin_key = await fetch_by_address(query, chain)
+    else:
+        data, coin_key = await fetch_by_name(query)
+
+    await wait.delete()
+
+    if not data:
+        await update.message.reply_text(
+            f"❌ *Token not found:* `{query}`\n\nTry using the contract address:\n`/price 0x... mantle`",
+            parse_mode="Markdown")
+        return
+
+    price = data.get("price", 0)
+    change = data.get("confidence", 0)
+    symbol = data.get("symbol", query.upper())
+    chain_name = coin_key.split(":")[0] if coin_key else "unknown"
+
+    # Format price
+    if price >= 1:
+        price_fmt = f"${price:,.4f}"
+    elif price >= 0.001:
+        price_fmt = f"${price:.6f}"
+    else:
+        price_fmt = f"${price:.8f}"
+
+    # 24h change from DeFiLlama percentage endpoint
+    change_24h = None
+    try:
+        async with aiohttp.ClientSession(trust_env=False) as s:
+            async with s.get(f"https://coins.llama.fi/percentage/{coin_key}?period=24h",
+                             timeout=aiohttp.ClientTimeout(total=8)) as r:
+                if r.status == 200:
+                    d = await r.json()
+                    coins = d.get("coins", {})
+                    if coins:
+                        change_24h = list(coins.values())[0]
+    except: pass
+
+    change_line = ""
+    if change_24h is not None:
+        emoji = "📈" if change_24h >= 0 else "📉"
+        change_line = f"\n{emoji} 24h Change: `{'+' if change_24h >= 0 else ''}{change_24h:.2f}%`"
+
+    report = f"""💰 *{symbol.upper()} Price*
+━━━━━━━━━━━━━━━━━━━
+💵 Price: `{price_fmt}`{change_line}
+🔗 Source: `{chain_name}`
+━━━━━━━━━━━━━━━━━━━
+[⚖️ verdictprotocol.online](https://verdictprotocol.online)"""
+
+    await update.message.reply_text(report, parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("🟢 /mantle ecosystem", callback_data="mantle_eco"),
+        ]]), disable_web_page_preview=True)
+
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -373,6 +506,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("whale:"):
         context.args = [data.split(":")[1]]
         await whale_command(update, context)
+    elif data.startswith("mantle_eco"):
+        await mantle_command(update, context)
 
 async def mantle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     wait = await update.message.reply_text(
@@ -555,6 +690,7 @@ def main():
     for cmd in ["watchlist","docket"]: app.add_handler(CommandHandler(cmd, watchlist_command))
     for cmd in ["whale","suspect"]: app.add_handler(CommandHandler(cmd, whale_command))
     app.add_handler(CommandHandler("mantle", mantle_command))
+    app.add_handler(CommandHandler("price", price_command))
     app.add_handler(CommandHandler("unwatch", unwatch_command))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
