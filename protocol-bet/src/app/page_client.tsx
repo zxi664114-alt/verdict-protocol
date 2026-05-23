@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit';
-import { useAccount, useChainId } from 'wagmi';
+import { useAccount, useChainId, useSwitchChain } from 'wagmi';
 import { formatEther } from 'viem';
 import {
   useCounter, useAllDuels, useMyDuels,
@@ -754,6 +754,11 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
   const isMock = onChainDuel?.id === 42;
 
   const { openConnectModal } = useConnectModal();
+  const { switchChain } = useSwitchChain();
+  const currentChainId = useChainId();
+  // 根据duel的network判断目标链
+  const targetChainId = duel.network?.includes('Mantle') ? 5003 : 97; // BNB Testnet or Mantle Sepolia
+  const isWrongNetwork = !!address && currentChainId !== targetChainId;
   const myAddr = ((address || (typeof window !== 'undefined' ? (window as any).ethereum?.selectedAddress : '') || '')).toLowerCase();
   const isMyRed = !!(myAddr && onChainDuel && onChainDuel.red.toLowerCase() === myAddr);
   const isMyBlue = !!(myAddr && onChainDuel && onChainDuel.blue.toLowerCase() === myAddr);
@@ -887,9 +892,9 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
       <div style={S.foot}>
         <Btn label="取消" color="rgba(255,255,255,0.4)" bg="transparent" border="rgba(255,255,255,0.15)" onClick={onClose} />
         <Btn
-          label={!address ? '🔗 连接钱包后参与' : acceptSuccess ? '✓ 已接受!' : acceptConfirming ? '确认中...' : acceptPending ? '等待签名...' : '⚔️ 接受挑战'}
-          color="#ff6b6b" bg="rgba(255,107,107,0.1)" border="rgba(255,107,107,0.4)"
-          onClick={() => !address ? openConnectModal?.() : onChainDuel && accept(onChainDuel.id, wager)}
+          label={!address ? '🔗 连接钱包后参与' : isWrongNetwork ? '⚠️ 切换到 BNB Testnet' : acceptSuccess ? '✓ 已接受!' : acceptConfirming ? '确认中...' : acceptPending ? '等待签名...' : '⚔️ 接受挑战'}
+          color={isWrongNetwork ? 'rgba(250,199,117,0.9)' : '#ff6b6b'} bg={isWrongNetwork ? 'rgba(250,199,117,0.06)' : 'rgba(255,107,107,0.1)'} border={isWrongNetwork ? 'rgba(250,199,117,0.4)' : 'rgba(255,107,107,0.4)'}
+          onClick={() => !address ? openConnectModal?.() : isWrongNetwork ? switchChain({ chainId: targetChainId }) : onChainDuel && accept(onChainDuel.id, wager)}
           disabled={acceptPending || acceptConfirming}
         />
       </div>
@@ -997,10 +1002,10 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
       <div style={S.foot}>
         <Btn label="取消" color="rgba(255,255,255,0.4)" bg="transparent" border="rgba(255,255,255,0.15)" onClick={onClose} />
         <Btn
-          label={!address && !isMock ? '🔗 连接钱包后参与' : isMock ? '🎮 演示模式' : betSuccess ? '✓ 押注成功!' : betConfirming ? '确认中...' : betPending ? '等待签名...' : '🔒 确认押注'}
-          color="#6b9fff" bg="rgba(107,159,255,0.1)" border="rgba(107,159,255,0.4)"
-          onClick={() => { if(!address && !isMock){ openConnectModal?.(); return; } if(!isMock && selectedSide && betStakeNum && onChainDuel) placeBet(onChainDuel.id, selectedSide, betStake); }}
-          disabled={isMock || betPending || betConfirming || (!!address && (!selectedSide || !betStakeNum))}
+          label={!address && !isMock ? '🔗 连接钱包后参与' : isWrongNetwork && !isMock ? '⚠️ 切换到 BNB Testnet' : isMock ? '🎮 演示模式' : betSuccess ? '✓ 押注成功!' : betConfirming ? '确认中...' : betPending ? '等待签名...' : '🔒 确认押注'}
+          color={isWrongNetwork && !isMock ? 'rgba(250,199,117,0.9)' : '#6b9fff'} bg={isWrongNetwork && !isMock ? 'rgba(250,199,117,0.06)' : 'rgba(107,159,255,0.1)'} border={isWrongNetwork && !isMock ? 'rgba(250,199,117,0.4)' : 'rgba(107,159,255,0.4)'}
+          onClick={() => { if(!address && !isMock){ openConnectModal?.(); return; } if(isWrongNetwork && !isMock){ switchChain({ chainId: targetChainId }); return; } if(!isMock && selectedSide && betStakeNum && onChainDuel) placeBet(onChainDuel.id, selectedSide, betStake); }}
+          disabled={isMock || betPending || betConfirming || (!!address && !isWrongNetwork && (!selectedSide || !betStakeNum))}
         />
       </div>
     </>
