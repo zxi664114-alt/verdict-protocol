@@ -1,9 +1,30 @@
 // src/app/api/claim/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
-// 用Vercel KV存储声明数据
-// fallback到内存存储（本地开发用）
-const memoryStore: Record<string, { claimText: string; ruleText: string; createdAt: number }> = {};
+async function getRedis() {
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return null;
+  return { url, token };
+}
+
+async function kvSet(key: string, value: string) {
+  const redis = await getRedis();
+  if (!redis) return;
+  await fetch(`${redis.url}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}`, {
+    headers: { Authorization: `Bearer ${redis.token}` },
+  });
+}
+
+async function kvGet(key: string): Promise<string | null> {
+  const redis = await getRedis();
+  if (!redis) return null;
+  const res = await fetch(`${redis.url}/get/${encodeURIComponent(key)}`, {
+    headers: { Authorization: `Bearer ${redis.token}` },
+  });
+  const data = await res.json();
+  return data.result || null;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,21 +32,10 @@ export async function POST(req: NextRequest) {
     if (!claimHash || !claimText) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
-
-    const data = { claimText, ruleText: ruleText || '', createdAt: Date.now() };
-
-    try {
-      // 尝试使用Vercel KV
-      const { kv } = await import('@vercel/kv');
-      await kv.set(`claim:${claimHash}`, data);
-      if (ruleHash && ruleText) {
-        await kv.set(`rule:${ruleHash}`, ruleText);
-      }
-    } catch {
-      // fallback到内存存储（本地开发）
-      memoryStore[`claim:${claimHash}`] = data;
+    await kvSet(`claim:${claimHash}`, claimText);
+    if (ruleHash && ruleText) {
+      await kvSet(`rule:${ruleHash}`, ruleText);
     }
-
     return NextResponse.json({ success: true });
   } catch (e) {
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
@@ -36,23 +46,13 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const claimHash = searchParams.get('claimHash');
+    const ruleHash = searchParams.get('ruleHash');
     if (!claimHash) {
       return NextResponse.json({ error: 'Missing claimHash' }, { status: 400 });
     }
-
-    let data = null;
-    try {
-      const { kv } = await import('@vercel/kv');
-      data = await kv.get(`claim:${claimHash}`);
-    } catch {
-      data = memoryStore[`claim:${claimHash}`] || null;
-    }
-
-    if (!data) {
-      return NextResponse.json({ claimText: null, ruleText: null });
-    }
-
-    return NextResponse.json(data);
+    const claimText = await kvGet(`claim:${claimHash}`);
+    const ruleText = ruleHash ? await kvGet(`rule:${ruleHash}`) : null;
+    return NextResponse.json({ claimText, ruleText });
   } catch (e) {
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
