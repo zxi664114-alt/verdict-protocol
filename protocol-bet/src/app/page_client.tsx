@@ -1650,14 +1650,11 @@ function AppInner() {
                 <span className="text-white/15">— no active duels</span>
               )}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '12px' }}>
-              {visibleDuels.length > 0
-                ? visibleDuels.map((od, i) => {
-                    const duel = onChainToDuel(od, i);
-                    return <DuelCard key={od.id} duel={duel} t={t} onClick={() => handleSelectDuel(duel, od)} onEnter={() => handleSelectDuel(duel, od)} />;
-                  })
-                : !isLoading && DUELS.map(d => <DuelCard key={d.id} duel={d} t={t} onClick={() => setSelectedDuel(d)} onEnter={() => setSelectedDuel(d)} />)
-              }
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+              {visibleDuels.map((od, i) => {
+                const duel = onChainToDuel(od, i);
+                return <DuelCard key={od.id} duel={duel} t={t} onClick={() => handleSelectDuel(duel, od)} onEnter={() => handleSelectDuel(duel, od)} />;
+              })}
             </div>
           </div>
           <div className="pb-8 pt-4 text-center">
