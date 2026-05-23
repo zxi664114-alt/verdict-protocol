@@ -1,19 +1,16 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import './globals.css';
 import { Providers } from './providers';
-
-const inter = Inter({ subsets: ['latin'] });
+import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Protocol Bet — Verdict Protocol',
-  description: 'The on-chain duel arena. Issue a bet on anything. Let the AI Judge decide.',
+  description: 'On-chain dueling protocol with AI judge',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body>
         <Providers>{children}</Providers>
       </body>
     </html>
