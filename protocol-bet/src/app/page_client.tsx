@@ -339,7 +339,7 @@ function IssueModal({ t, onClose, chainId = 97 }: { t: typeof LANG['en']; onClos
     const visNum = visibility === 'public' ? 0 : visibility === 'private' ? 1 : 2;
     const claimTrimmed = claim.trim();
     const ruleTrimmed = rule.trim();
-    // 用viem的keccak256计算hash，以hash为key存入localStorage
+    // 存到localStorage（本地快速读取）+ API（跨设备读取）
     if (typeof window !== 'undefined') {
       try {
         const { keccak256, toBytes } = require('viem');
@@ -347,11 +347,13 @@ function IssueModal({ t, onClose, chainId = 97 }: { t: typeof LANG['en']; onClos
         const rHash = keccak256(toBytes(ruleTrimmed));
         localStorage.setItem('claim_' + cHash, claimTrimmed);
         localStorage.setItem('rule_' + rHash, ruleTrimmed);
-      } catch (e) {
-        // fallback: 存到sessionStorage备用
-        sessionStorage.setItem('pending_claim', claimTrimmed);
-        sessionStorage.setItem('pending_rule', ruleTrimmed);
-      }
+        // 同时存到服务端，让其他用户也能看到
+        fetch('/api/claim', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ claimHash: cHash, ruleHash: rHash, claimText: claimTrimmed, ruleText: ruleTrimmed }),
+        }).catch(() => {});
+      } catch (e) {}
     }
     create({ claim: claimTrimmed, rule: ruleTrimmed, durationSecs, wagerEth: stake, audioBps: audienceRatio * 100, vis: visNum });
   };
@@ -1487,6 +1489,24 @@ function AppInner() {
   const visibleDuels = onChainDuels.filter(d =>
     (d.status === DuelStatus.Open || d.status === DuelStatus.Active) && d.deadline > now
   );
+
+  // 从API批量拉取对决声明，补充localStorage没有的数据
+  useEffect(() => {
+    if (onChainDuels.length === 0) return;
+    onChainDuels.forEach(d => {
+      const localClaim = localStorage.getItem('claim_' + d.claimHash);
+      if (!localClaim && d.claimHash !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
+        fetch(`/api/claim?claimHash=${d.claimHash}`)
+          .then(r => r.json())
+          .then(data => {
+            if (data.claimText) {
+              localStorage.setItem('claim_' + d.claimHash, data.claimText);
+              if (data.ruleText) localStorage.setItem('rule_' + d.ruleHash, data.ruleText);
+            }
+          }).catch(() => {});
+      }
+    });
+  }, [onChainDuels]);
 
   // URL参数检测：?duel=id 自动弹出对应对决
   useEffect(() => {
