@@ -44,17 +44,101 @@ async function sendTelegramMessage(chatId: string, text: string) {
   });
 }
 
+function fmtEther(weiStr: string): string {
+  try {
+    const val = parseFloat((BigInt(weiStr) * 10000n / BigInt(1e18)).toString()) / 10000;
+    return val.toFixed(4).replace(/\.?0+$/, '');
+  } catch { return '?'; }
+}
+
+function fmtDeadline(deadlineStr: string): string {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const deadline = parseInt(deadlineStr);
+    const diff = deadline - now;
+    if (diff <= 0) return '已到期';
+    const days = Math.floor(diff / 86400);
+    const hours = Math.floor((diff % 86400) / 3600);
+    if (days > 0) return `约 ${days} 天 ${hours} 小时后`;
+    return `约 ${hours} 小时后`;
+  } catch { return '未知'; }
+}
+
 async function getDuel(id: number) {
   try {
     const idHex = id.toString(16).padStart(64, '0');
     const hex = await rpcCall('eth_call', [{ to: CONTRACT, data: '0x565e614f' + idHex }, 'latest']);
     if (!hex || hex === '0x' || hex.length < 10) return null;
     const data = hex.slice(2);
-    const blue = '0x' + data.slice(1 * 64 + 24, 1 * 64 + 64);
-    const status = parseInt(data.slice(9 * 64, 10 * 64), 16);
-    const claimHash = '0x' + data.slice(6 * 64, 7 * 64);
-    return { status, blue, claimHash };
+    const addr = (offset: number) => '0x' + data.slice(offset * 64 + 24, offset * 64 + 64);
+    const uint = (offset: number) => BigInt('0x' + (data.slice(offset * 64, offset * 64 + 64) || '0'));
+    return {
+      blue: addr(1),
+      wager: uint(3).toString(),
+      deadline: uint(5).toString(),
+      claimHash: '0x' + data.slice(6 * 64, 7 * 64),
+      ruleHash: '0x' + data.slice(7 * 64, 8 * 64),
+      status: Number(uint(9)),
+      winner: Number(uint(10)),
+    };
   } catch { return null; }
+}
+
+function buildAcceptedMessage(i: number, duel: any, claimText: string, ruleText: string): string {
+  const blue = duel.blue !== '0x0000000000000000000000000000000000000000'
+    ? `${duel.blue.slice(0, 6)}...${duel.blue.slice(-4)}` : '未知';
+  const wager = fmtEther(duel.wager);
+  const totalPool = fmtEther((BigInt(duel.wager) * 2n).toString());
+  const deadline = fmtDeadline(duel.deadline);
+  const claim = claimText || `#${i} — on-chain duel`;
+  const rule = ruleText || '以链上数据为准';
+
+  return `⚔️ *你的对决 #${i} 已被接受！*
+
+📋 *声明：* 「${claim}」
+📏 *裁定标准：* ${rule}
+
+🆚 *对手：* \`${blue}\`
+💰 *总池：* ${totalPool} tBNB（双方各 ${wager} tBNB）
+⏰ *到期：* ${deadline}
+🌐 *网络：* BNB Testnet
+
+*接下来可以做：*
+• 到期前与对手协商 → 共识结算
+• 到期后提交证据 → 申请 AI 裁定
+• 胜方裁定后 48h 内领取奖励
+
+🔗 [查看对决详情](https://verdictprotocol.online/?duel=${i})`;
+}
+
+function buildSettledMessage(i: number, duel: any, claimText: string, won: boolean): string {
+  const claim = claimText || `#${i} — on-chain duel`;
+  const result = won ? '🏆 你赢了！' : '💀 你输了';
+  return `${result}
+
+📋 *对决 #${i}：* 「${claim}」已结算
+
+${won ? '🎉 恭喜！赶快领取你的奖励吧，48小时内有效。' : '下次再战！'}
+
+🔗 [查看详情](https://verdictprotocol.online/?duel=${i})`;
+}
+
+async function processNotification(i: number, duel: any, prevStatus: number, notifications: string[], tgUsername: string, chatId: string) {
+  const claimText = await kvGet(`claim:${duel.claimHash}`) || '';
+  const ruleText = await kvGet(`rule:${duel.ruleHash}`) || '';
+
+  let message = '';
+  if (duel.status === 1 && prevStatus === 0) {
+    message = buildAcceptedMessage(i, duel, claimText, ruleText);
+  } else if (duel.status === 2 && prevStatus !== 2) {
+    const won = duel.winner === 1; // 简化：红方=发起人
+    message = buildSettledMessage(i, duel, claimText, won);
+  }
+
+  if (message) {
+    await sendTelegramMessage(chatId, message);
+    notifications.push(`duel #${i}: ${prevStatus}→${duel.status}, notified @${tgUsername}`);
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -73,55 +157,29 @@ export async function GET(req: NextRequest) {
       const prevStatus = await kvGet(prevStatusKey);
       const prevStatusNum = prevStatus ? parseInt(prevStatus) : -1;
 
-      // 第一次运行，记录初始状态
       if (prevStatusNum === -1) {
         await kvSet(prevStatusKey, String(duel.status));
-        // 如果第一次见到就已经是 Active，说明在我们监控前就被接受了，也发通知
         if (duel.status === 1) {
           const tgUsername = await kvGet(`tg:claim:${duel.claimHash}`);
           if (tgUsername) {
             const chatId = await kvGet(`tg:user:${tgUsername}`);
             if (chatId) {
-              const blue = duel.blue !== '0x0000000000000000000000000000000000000000'
-                ? `${duel.blue.slice(0, 6)}...${duel.blue.slice(-4)}` : '未知';
-              const message = `⚔️ *你的对决 #${i} 已被接受！*\n\n对手：\`${blue}\`\n\n查看详情：https://verdictprotocol.online/?duel=${i}`;
-              await sendTelegramMessage(chatId, message);
-              notifications.push(`duel #${i}: first-seen Active, notified @${tgUsername}`);
+              await processNotification(i, duel, 0, notifications, tgUsername, chatId);
             }
           }
         }
         continue;
       }
 
-      // 状态没变就跳过
       if (prevStatusNum === duel.status) continue;
-
-      // 状态变了，更新记录
       await kvSet(prevStatusKey, String(duel.status));
 
-      // 通过 claimHash 找 TG 用户名
       const tgUsername = await kvGet(`tg:claim:${duel.claimHash}`);
       if (!tgUsername) continue;
-
-      // 找 chat_id
       const chatId = await kvGet(`tg:user:${tgUsername}`);
       if (!chatId) continue;
 
-      let message = '';
-      if (duel.status === 1 && prevStatusNum === 0) {
-        // Open → Active：有人接受了
-        const blue = duel.blue !== '0x0000000000000000000000000000000000000000'
-          ? `${duel.blue.slice(0, 6)}...${duel.blue.slice(-4)}`
-          : '未知';
-        message = `⚔️ *你的对决 #${i} 已被接受！*\n\n对手：\`${blue}\`\n\n查看详情：https://verdictprotocol.online/?duel=${i}`;
-      } else if (duel.status === 2 && prevStatusNum !== 2) {
-        message = `🏆 *对决 #${i} 已结算！*\n\n前往领取奖励：https://verdictprotocol.online/?duel=${i}`;
-      }
-
-      if (message) {
-        await sendTelegramMessage(chatId, message);
-        notifications.push(`duel #${i}: ${prevStatusNum}→${duel.status}, notified @${tgUsername}`);
-      }
+      await processNotification(i, duel, prevStatusNum, notifications, tgUsername, chatId);
     }
 
     return NextResponse.json({ checked: count, notifications });
@@ -129,4 +187,3 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
-// Mon May 25 05:55:19 CST 2026
