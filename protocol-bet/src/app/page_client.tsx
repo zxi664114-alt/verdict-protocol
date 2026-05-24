@@ -1563,7 +1563,7 @@ function AppInner() {
 
   const refetch = () => fetchDuels(true);
 
-  useEffect(() => { fetchDuels(); }, []);
+  useEffect(() => { fetchDuels(); fetch("/api/notify").catch(()=>{}); }, []);
   const totalCount = onChainDuels.length;
 
   // 过滤：只展示 Open 和 Active 状态，且未过期
