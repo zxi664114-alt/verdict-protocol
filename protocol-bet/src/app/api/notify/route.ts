@@ -1,6 +1,4 @@
 // src/app/api/notify/route.ts
-// 轮询链上对决状态，发现变化时通过 Telegram Bot 发通知
-
 import { NextRequest, NextResponse } from 'next/server';
 
 const CONTRACT = '0xa0A997cF05F7Baf21becEA4130209fD7C7D1A994';
@@ -46,7 +44,7 @@ async function sendTelegramMessage(chatId: string, text: string) {
   });
 }
 
-async function getDuelStatus(id: number): Promise<{ status: number; blue: string } | null> {
+async function getDuel(id: number) {
   try {
     const idHex = id.toString(16).padStart(64, '0');
     const hex = await rpcCall('eth_call', [{ to: CONTRACT, data: '0x565e614f' + idHex }, 'latest']);
@@ -54,13 +52,13 @@ async function getDuelStatus(id: number): Promise<{ status: number; blue: string
     const data = hex.slice(2);
     const blue = '0x' + data.slice(1 * 64 + 24, 1 * 64 + 64);
     const status = parseInt(data.slice(9 * 64, 10 * 64), 16);
-    return { status, blue };
+    const claimHash = '0x' + data.slice(6 * 64, 7 * 64);
+    return { status, blue, claimHash };
   } catch { return null; }
 }
 
 export async function GET(req: NextRequest) {
   try {
-    // 读取 counter
     const counterHex = await rpcCall('eth_call', [{ to: CONTRACT, data: '0x61bc221a' }, 'latest']);
     const count = parseInt(counterHex, 16);
     if (!count) return NextResponse.json({ checked: 0 });
@@ -68,45 +66,47 @@ export async function GET(req: NextRequest) {
     const notifications: string[] = [];
 
     for (let i = 1; i <= count; i++) {
-      const current = await getDuelStatus(i);
-      if (!current) continue;
+      const duel = await getDuel(i);
+      if (!duel) continue;
 
       const prevStatusKey = `duel:status:${i}`;
       const prevStatus = await kvGet(prevStatusKey);
       const prevStatusNum = prevStatus ? parseInt(prevStatus) : -1;
 
+      // 第一次运行，记录初始状态，不发通知
+      if (prevStatusNum === -1) {
+        await kvSet(prevStatusKey, String(duel.status));
+        continue;
+      }
+
       // 状态没变就跳过
-      if (prevStatusNum === current.status) continue;
+      if (prevStatusNum === duel.status) continue;
 
-      // 保存新状态
-      await kvSet(prevStatusKey, String(current.status));
+      // 状态变了，更新记录
+      await kvSet(prevStatusKey, String(duel.status));
 
-      // 读取这个对决的 TG 用户名
-      const tgKey = `duel:tg:${i}`;
-      const tgUsername = await kvGet(tgKey);
-
+      // 通过 claimHash 找 TG 用户名
+      const tgUsername = await kvGet(`tg:claim:${duel.claimHash}`);
       if (!tgUsername) continue;
 
-      // 读取 chat_id
-      const chatId = await kvGet(`tg:user:${tgUsername.toLowerCase()}`);
+      // 找 chat_id
+      const chatId = await kvGet(`tg:user:${tgUsername}`);
       if (!chatId) continue;
 
-      // status: 0=Open, 1=Active, 2=Settled, 3=Cancelled
       let message = '';
-      if (current.status === 1 && prevStatusNum === 0) {
+      if (duel.status === 1 && prevStatusNum === 0) {
         // Open → Active：有人接受了
-        const blue = current.blue !== '0x0000000000000000000000000000000000000000'
-          ? `${current.blue.slice(0, 6)}...${current.blue.slice(-4)}`
+        const blue = duel.blue !== '0x0000000000000000000000000000000000000000'
+          ? `${duel.blue.slice(0, 6)}...${duel.blue.slice(-4)}`
           : '未知';
-        message = `⚔️ *你的对决 #${i} 已被接受！*\n\n对手：\`${blue}\`\n\n前往广场查看详情：https://verdictprotocol.online/?duel=${i}`;
-      } else if (current.status === 2) {
-        // → Settled：结算了
-        message = `🏆 *对决 #${i} 已结算！*\n\n前往查看结果并领取奖励：https://verdictprotocol.online/?duel=${i}`;
+        message = `⚔️ *你的对决 #${i} 已被接受！*\n\n对手：\`${blue}\`\n\n查看详情：https://verdictprotocol.online/?duel=${i}`;
+      } else if (duel.status === 2 && prevStatusNum !== 2) {
+        message = `🏆 *对决 #${i} 已结算！*\n\n前往领取奖励：https://verdictprotocol.online/?duel=${i}`;
       }
 
       if (message) {
         await sendTelegramMessage(chatId, message);
-        notifications.push(`duel #${i}: status ${prevStatusNum}→${current.status}, notified @${tgUsername}`);
+        notifications.push(`duel #${i}: ${prevStatusNum}→${duel.status}, notified @${tgUsername}`);
       }
     }
 

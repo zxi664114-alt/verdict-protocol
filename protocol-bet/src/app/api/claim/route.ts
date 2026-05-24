@@ -28,14 +28,21 @@ async function kvGet(key: string): Promise<string | null> {
 
 export async function POST(req: NextRequest) {
   try {
-    const { claimHash, ruleHash, claimText, ruleText } = await req.json();
-    if (!claimHash || !claimText) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    const { claimHash, ruleHash, claimText, ruleText, tgUsername } = await req.json();
+
+    // 存声明文字
+    if (claimHash && claimText) {
+      await kvSet(`claim:${claimHash}`, claimText);
     }
-    await kvSet(`claim:${claimHash}`, claimText);
     if (ruleHash && ruleText) {
       await kvSet(`rule:${ruleHash}`, ruleText);
     }
+
+    // 存 TG 用户名（绑定到 claimHash，notify route 会用来找对应 duel）
+    if (tgUsername && claimHash) {
+      await kvSet(`tg:claim:${claimHash}`, tgUsername.toLowerCase().replace(/^@/, ''));
+    }
+
     return NextResponse.json({ success: true });
   } catch (e) {
     return NextResponse.json({ error: 'Server error' }, { status: 500 });

@@ -70,6 +70,7 @@ const LANG = {
       visibilityDescPrivate: 'Send directly to your opponent via link.',
       visibilityDescAI: 'No human opponent. The AI takes the other side.',
       visibilityAINote: '🏆 Win → earn $VRD tokens · Lose → your tokens enter the treasury',
+      tgLabel: 'Telegram (optional)', tgPlaceholder: '@username — get notified when accepted',
       cancel: 'Cancel', submit: '🔒 Lock & Issue', submitAI: '🔒 Lock & Challenge AI',
     },
     duelModal: {
@@ -151,6 +152,7 @@ const LANG = {
       visibilityDescPrivate: '通过链接直接发送给你的对手。',
       visibilityDescAI: '无需真人对手，AI法官站到另一边。',
       visibilityAINote: '🏆 赢了 → 获得 $VRD 代币 · 输了 → 代币进入金库',
+      tgLabel: 'Telegram（选填）', tgPlaceholder: '@用户名 — 有人接受时通知你',
       cancel: '取消', submit: '🔒 锁仓并发起', submitAI: '🔒 锁仓并挑战AI',
     },
     duelModal: {
@@ -316,6 +318,7 @@ function IssueModal({ t, onClose, chainId = 97 }: { t: typeof LANG['en']; onClos
   const [visibility, setVisibility] = useState<'public' | 'private' | 'ai'>('public');
   const [audienceRatio, setAudienceRatio] = useState(0);
   const [submitted, setSubmitted] = useState(false);
+  const [tgUsername, setTgUsername] = useState('');
 
   const currentToken = chainId === 97 ? 'tBNB' : chainId === 5003 ? 'MNT' : chainId === 56 ? 'BNB' : 'ETH';
   const currentNetwork = chainId === 97 ? 'BNB Testnet' : chainId === 5003 ? 'Mantle Sepolia' : chainId === 56 ? 'BNB Chain' : 'Ethereum';
@@ -348,6 +351,16 @@ function IssueModal({ t, onClose, chainId = 97 }: { t: typeof LANG['en']; onClos
         localStorage.setItem('claim_' + cHash, claimTrimmed);
         localStorage.setItem('rule_' + rHash, ruleTrimmed);
         // 同时存到服务端，让其他用户也能看到
+        // 存 TG 用户名（用于接受对决时通知）
+        if (tgUsername.trim()) {
+          const tgClean = tgUsername.trim().replace(/^@/, '').toLowerCase();
+          // 先存一个临时 key，notify route 会在链上确认后绑定到 duel id
+          fetch('/api/claim', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tgUsername: tgClean, claimHash: cHash }),
+          }).catch(() => {});
+        }
         fetch('/api/claim', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -394,6 +407,19 @@ function IssueModal({ t, onClose, chainId = 97 }: { t: typeof LANG['en']; onClos
               placeholder={m.rulingPlaceholder}
               style={{width:'100%',background:'#10101e',border:'1px solid rgba(255,255,255,0.1)',borderRadius:'12px',padding:'10px 12px',fontSize:'14px',color:'rgba(255,255,255,0.8)',outline:'none',resize:'none',boxSizing:'border-box'}}
             />
+          </div>
+
+          {/* Telegram 通知 */}
+          <div>
+            <div style={{fontSize:'9px',letterSpacing:'0.1em',textTransform:'uppercase',color:'rgba(255,255,255,0.3)',marginBottom:'6px'}}>{m.tgLabel}</div>
+            <input
+              type="text"
+              value={tgUsername}
+              onChange={e => setTgUsername(e.target.value)}
+              placeholder={m.tgPlaceholder}
+              style={{width:'100%',background:'#10101e',border:'1px solid rgba(255,255,255,0.1)',borderRadius:'12px',padding:'10px 12px',fontSize:'14px',color:'rgba(255,255,255,0.8)',outline:'none',boxSizing:'border-box'}}
+            />
+            <div style={{fontSize:'9px',color:'rgba(255,255,255,0.2)',marginTop:'4px'}}>先给 @MemeCourt_Bot 发 /start 才能收到通知</div>
           </div>
 
           {/* 网络 */}
