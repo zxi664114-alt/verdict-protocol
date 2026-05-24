@@ -2,9 +2,10 @@
 
 import { RainbowKitProvider, getDefaultConfig, darkTheme } from '@rainbow-me/rainbowkit';
 import { WagmiProvider } from 'wagmi';
+import { http } from 'wagmi';
 import { mainnet, bsc, polygon, arbitrum, optimism, base, avalanche } from 'wagmi/chains';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
-import { useMemo, useRef } from 'react';
+import { useRef } from 'react';
 import type { ReactNode } from 'react';
 import '@rainbow-me/rainbowkit/styles.css';
 
@@ -29,12 +30,23 @@ const queryClient = new QueryClient();
 
 export default function Web3Providers({ children }: { children: ReactNode }) {
   const configRef = useRef<ReturnType<typeof getDefaultConfig> | null>(null);
-  
+
   if (!configRef.current) {
     configRef.current = getDefaultConfig({
       appName: 'Protocol Bet',
       projectId: 'c04340f72bb9dd71c7f22ba48ba492e0',
       chains: [bscTestnet, mantleSepolia, bsc, mainnet, polygon, arbitrum, optimism, base, avalanche],
+      transports: {
+        97: http('https://data-seed-prebsc-1-s1.bnbchain.org:8545'),
+        5003: http('https://rpc.sepolia.mantle.xyz'),
+        56: http('https://bsc-dataseed.binance.org'),
+        1: http('https://cloudflare-eth.com'),
+        137: http('https://polygon-rpc.com'),
+        42161: http('https://arb1.arbitrum.io/rpc'),
+        10: http('https://mainnet.optimism.io'),
+        8453: http('https://mainnet.base.org'),
+        43114: http('https://api.avax.network/ext/bc/C/rpc'),
+      },
       ssr: false,
     });
   }
