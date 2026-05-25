@@ -61,6 +61,305 @@ function BeamAvatar({ addr, size = 36, square = false }: { addr: string; size?: 
 const GradientAvatar = ({ addr, size = 36, className = '' }: { addr: string; size?: number; className?: string }) => (
   <BeamAvatar addr={addr} size={size} />
 );
+// ─── STAMP SHARE CARD ────────────────────────────────────────────────────────
+function StampCard({ duel, id }: { duel: Duel; id: string }) {
+  const claimText = (duel as any)._claimText || duel.id;
+  const ruleText = (duel as any)._ruleText || '';
+  const totalPot = (duel.challenger.amount + (duel.defender?.amount ?? duel.challenger.amount)).toFixed(3);
+  const isSettled = duel.status === 'live' && duel.watchers > 500; // placeholder, real settled handled separately
+  const isOpen = duel.status === 'open';
+  const isLive = duel.status === 'live' || duel.status === 'ending';
+  const bgColor = '#5B21B6';
+  const statusLabel = isOpen ? '招募中' : isLive ? '进行中' : '已裁定';
+  const statusEn = isOpen ? 'Open' : isLive ? 'Live' : 'Settled';
+  const duelId = String((duel as any)._onChainId || duel.id).padStart(4,'0');
+  const date = new Date().toISOString().slice(0,10).replace(/-/g,'·');
+
+  return (
+    <div id={id} style={{
+      width:'260px', background:'#fff', position:'relative', padding:'14px',
+      fontFamily:"'DM Sans', sans-serif",
+    }}>
+      {/* PERFORATED EDGE via box-shadow trick */}
+      <div style={{
+        border:'1.5px solid rgba(124,58,237,0.2)', borderRadius:'3px', overflow:'hidden',
+        position:'relative'
+      }}>
+        {/* ART AREA */}
+        <div style={{height:'130px', background:bgColor, display:'flex', flexDirection:'column',
+          alignItems:'center', justifyContent:'center', position:'relative', overflow:'hidden'}}>
+          {/* decorative circles */}
+          <div style={{position:'absolute',width:'180px',height:'180px',borderRadius:'50%',
+            background:'rgba(255,255,255,0.06)',top:'50%',left:'50%',transform:'translate(-50%,-50%)'}}/>
+          <div style={{position:'absolute',width:'130px',height:'130px',borderRadius:'50%',
+            border:'1px solid rgba(255,255,255,0.08)',top:'50%',left:'50%',transform:'translate(-50%,-50%)'}}/>
+          {/* corners */}
+          {['VP','2026','BNB','#'+duelId].map((t,i) => (
+            <span key={i} style={{position:'absolute',fontSize:'8px',fontWeight:700,letterSpacing:'1px',
+              color:'rgba(255,255,255,0.5)',fontFamily:'monospace',
+              ...(i===0?{top:'7px',left:'10px'}:i===1?{top:'7px',right:'10px'}:i===2?{bottom:'7px',left:'10px'}:{bottom:'7px',right:'10px'})
+            }}>{t}</span>
+          ))}
+          <img src="/verdict_logo.png" alt="" style={{width:'52px',height:'52px',objectFit:'contain',marginBottom:'6px',filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.25))'}} />
+          <div style={{fontSize:'11px',fontWeight:700,color:'#fff',letterSpacing:'0.5px',textTransform:'uppercase'}}>Verdict Protocol</div>
+          <div style={{fontSize:'8px',color:'rgba(255,255,255,0.55)',letterSpacing:'0.8px',textTransform:'uppercase',marginTop:'2px'}}>
+            On-Chain Duel · {statusEn}
+          </div>
+        </div>
+        {/* VALUE BAR */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',
+          padding:'5px 10px',borderBottom:'1px solid #EEE9FC',background:'#fafafa'}}>
+          <span style={{fontSize:'8px',fontWeight:700,color:'#9CA3AF',letterSpacing:'0.5px',textTransform:'uppercase'}}>{duel.network}</span>
+          <span style={{fontSize:'12px',fontWeight:700,color:'#5B21B6'}}>{totalPot} {duel.token}</span>
+          <span style={{fontSize:'8px',fontWeight:600,padding:'2px 7px',borderRadius:'10px',
+            background: isOpen?'#EFF6FF':isLive?'#FFF1F2':'#ECFDF5',
+            color: isOpen?'#1D4ED8':isLive?'#BE123C':'#065F46'
+          }}>{statusLabel}</span>
+        </div>
+        {/* INFO */}
+        <div style={{padding:'10px'}}>
+          <div style={{background:'#F9F8FF',borderRadius:'8px',padding:'7px 9px',marginBottom:'8px',
+            borderLeft:'2px solid #7C3AED'}}>
+            <div style={{fontSize:'11px',fontWeight:600,color:'#1A1A2E',lineHeight:1.4,
+              display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
+              {claimText}
+            </div>
+          </div>
+          {/* PLAYERS */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 20px 1fr',gap:'4px',alignItems:'center',marginBottom:'7px'}}>
+            <div style={{background:'#FFF1F2',borderRadius:'7px',padding:'6px 7px',textAlign:'center'}}>
+              <div style={{fontSize:'7px',color:'#9CA3AF',marginBottom:'2px',textTransform:'uppercase'}}>Challenger</div>
+              <div style={{fontSize:'8px',color:'#6B7280',fontFamily:'monospace',marginBottom:'2px'}}>{duel.challenger.addr}</div>
+              <div><span style={{fontSize:'15px',fontWeight:700,color:'#F43F5E'}}>{duel.challenger.amount}</span>
+              <span style={{fontSize:'8px',fontWeight:600,padding:'1px 4px',borderRadius:'4px',
+                background:'#FFE4E6',color:'#F43F5E',marginLeft:'2px'}}>{duel.token}</span></div>
+            </div>
+            <div style={{display:'flex',justifyContent:'center'}}>
+              <span style={{fontSize:'8px',fontWeight:700,color:'#7C3AED',background:'#F5F3FF',
+                padding:'2px 3px',borderRadius:'4px'}}>VS</span>
+            </div>
+            {duel.defender ? (
+              <div style={{background:'#EFF6FF',borderRadius:'7px',padding:'6px 7px',textAlign:'center'}}>
+                <div style={{fontSize:'7px',color:'#9CA3AF',marginBottom:'2px',textTransform:'uppercase'}}>Defender</div>
+                <div style={{fontSize:'8px',color:'#6B7280',fontFamily:'monospace',marginBottom:'2px'}}>{duel.defender.addr}</div>
+                <div><span style={{fontSize:'15px',fontWeight:700,color:'#3B82F6'}}>{duel.defender.amount}</span>
+                <span style={{fontSize:'8px',fontWeight:600,padding:'1px 4px',borderRadius:'4px',
+                  background:'#DBEAFE',color:'#3B82F6',marginLeft:'2px'}}>{duel.token}</span></div>
+              </div>
+            ) : (
+              <div style={{background:'#F9F8FF',border:'1px dashed #C4B5FD',borderRadius:'7px',
+                padding:'6px 7px',textAlign:'center',minHeight:'54px',display:'flex',
+                flexDirection:'column',alignItems:'center',justifyContent:'center',gap:'2px'}}>
+                <span style={{fontSize:'16px',color:'#C4B5FD'}}>?</span>
+                <span style={{fontSize:'7px',color:'#C4B5FD'}}>Waiting</span>
+              </div>
+            )}
+          </div>
+          {/* SUPPORT BAR */}
+          {duel.defender && (
+            <div style={{marginBottom:'7px'}}>
+              <div style={{height:'4px',borderRadius:'4px',background:'#F3F0FB',overflow:'hidden',
+                display:'flex',marginBottom:'2px'}}>
+                <div style={{background:'#F43F5E',borderRadius:'4px 0 0 4px',width:`${duel.supportRed}%`}}/>
+                <div style={{background:'#3B82F6',borderRadius:'0 4px 4px 0',flex:1}}/>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:'8px',fontWeight:600}}>
+                <span style={{color:'#F43F5E'}}>{duel.supportRed}%</span>
+                <span style={{color:'#C4B5FD',fontSize:'7px'}}>Community Vote</span>
+                <span style={{color:'#3B82F6'}}>{100-duel.supportRed}%</span>
+              </div>
+            </div>
+          )}
+          <div style={{display:'flex',gap:'3px',flexWrap:'wrap'}}>
+            <span style={{fontSize:'8px',fontWeight:500,padding:'2px 6px',borderRadius:'7px',
+              background:'#F9F8FF',border:'1px solid #EEE9FC',color:'#374151'}}>⏰ {duel.expires}</span>
+            <span style={{fontSize:'8px',fontWeight:500,padding:'2px 6px',borderRadius:'7px',
+              background:'#F9F8FF',border:'1px solid #EEE9FC',color:'#374151'}}>💰 {totalPot} {duel.token}</span>
+          </div>
+        </div>
+        {/* FOOTER */}
+        <div style={{borderTop:'1px dashed #EEE9FC',padding:'5px 10px',
+          display:'flex',justifyContent:'space-between',alignItems:'center',background:'#fafafa'}}>
+          <span style={{fontSize:'7px',color:'#C4B5FD',letterSpacing:'0.3px'}}>verdictprotocol.online</span>
+          <span style={{fontSize:'8px',fontWeight:700,color:'#9CA3AF',fontFamily:'monospace'}}>#{duelId}</span>
+        </div>
+      </div>
+      {/* POSTMARK */}
+      <svg style={{position:'absolute',top:'18px',right:'18px',opacity:0.12,transform:'rotate(15deg)',zIndex:10}}
+        width="72" height="72" viewBox="0 0 72 72">
+        <circle cx="36" cy="36" r="32" fill="none" stroke="#7C3AED" strokeWidth="2.5"/>
+        <circle cx="36" cy="36" r="24" fill="none" stroke="#7C3AED" strokeWidth="1"/>
+        <text x="36" y="32" textAnchor="middle" fontSize="7" fontWeight="700" fill="#7C3AED" fontFamily="monospace">VERDICT</text>
+        <text x="36" y="41" textAnchor="middle" fontSize="6" fill="#7C3AED" fontFamily="monospace">PROTOCOL</text>
+        <text x="36" y="50" textAnchor="middle" fontSize="5.5" fill="#7C3AED" fontFamily="monospace">{date}</text>
+      </svg>
+    </div>
+  );
+}
+
+async function generateStampImage(duel: Duel) {
+  const claimText = (duel as any)._claimText || String(duel.id);
+  const totalPot = (duel.challenger.amount + (duel.defender?.amount ?? duel.challenger.amount)).toFixed(3);
+  const duelId = String((duel as any)._onChainId || duel.id).padStart(4,'0');
+  const isOpen = duel.status === 'open';
+  const isLive = duel.status === 'live' || duel.status === 'ending';
+  const statusLabel = isOpen ? '招募中' : isLive ? '进行中' : '已裁定';
+  const statusEn = isOpen ? 'Open' : isLive ? 'Live' : 'Settled';
+  const artBg = isOpen ? '#5B21B6' : isLive ? '#4C1D95' : '#065F46';
+  const stBg = isOpen ? '#EFF6FF' : isLive ? '#FFF1F2' : '#ECFDF5';
+  const stColor = isOpen ? '#1D4ED8' : isLive ? '#BE123C' : '#065F46';
+  const valColor = isOpen || isLive ? '#5B21B6' : '#059669';
+  const date = new Date().toISOString().slice(0,10).replace(/-/g,'·');
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;left:-9999px;top:-9999px;z-index:-999;font-family:DM Sans,system-ui,sans-serif;';
+
+  // STAMP OUTER —牛皮纸背景 + 锯齿边
+  wrap.innerHTML = `
+<div style="width:300px;background:#E8E0D4;padding:14px;position:relative;">
+  <div style="position:absolute;inset:0;
+    background:
+      radial-gradient(circle at 0 50%,#E8E0D4 7px,transparent 7px),
+      radial-gradient(circle at 100% 50%,#E8E0D4 7px,transparent 7px),
+      radial-gradient(circle at 50% 0,#E8E0D4 7px,transparent 7px),
+      radial-gradient(circle at 50% 100%,#E8E0D4 7px,transparent 7px);
+    background-size:15px 15px;
+    background-position:-7px 50%,calc(100% + 7px) 50%,50% -7px,50% calc(100% + 7px);
+    background-repeat:repeat-y,repeat-y,repeat-x,repeat-x;
+    z-index:1;pointer-events:none;">
+  </div>
+  <div style="position:relative;z-index:2;border:1.5px solid rgba(124,58,237,0.2);border-radius:3px;overflow:hidden;background:#fff;">
+
+    <!-- ART AREA -->
+    <div style="height:225px;background:${artBg};display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;overflow:hidden;">
+      <div style="position:absolute;width:240px;height:240px;border-radius:50%;background:rgba(255,255,255,0.05);top:44%;left:50%;transform:translate(-50%,-50%);"></div>
+      <div style="position:absolute;width:185px;height:185px;border-radius:50%;border:1px solid rgba(255,255,255,0.08);top:44%;left:50%;transform:translate(-50%,-50%);"></div>
+      <div style="position:absolute;width:130px;height:130px;border-radius:50%;border:0.5px solid rgba(255,255,255,0.06);top:44%;left:50%;transform:translate(-50%,-50%);"></div>
+      <span style="position:absolute;top:7px;left:10px;font-size:9px;font-weight:700;letter-spacing:1px;color:rgba(255,255,255,0.6);font-family:monospace;">VP</span>
+      <span style="position:absolute;top:7px;right:10px;font-size:9px;font-weight:700;letter-spacing:1px;color:rgba(255,255,255,0.6);font-family:monospace;">2026</span>
+      <span style="position:absolute;bottom:7px;left:10px;font-size:9px;font-weight:700;letter-spacing:1px;color:rgba(255,255,255,0.6);font-family:monospace;">BNB</span>
+      <span style="position:absolute;bottom:7px;right:10px;font-size:9px;font-weight:700;letter-spacing:1px;color:rgba(255,255,255,0.6);font-family:monospace;">#${duelId}</span>
+      <img src="/verdict_logo.png" style="width:155px;height:155px;object-fit:contain;margin-bottom:2px;filter:drop-shadow(0 4px 20px rgba(0,0,0,0.35));" crossorigin="anonymous" onerror="this.style.display='none'"/>
+      <div style="font-size:13px;font-weight:700;color:#fff;letter-spacing:0.5px;text-transform:uppercase;text-shadow:0 1px 4px rgba(0,0,0,0.2);line-height:1;">VERDICT PROTOCOL</div>
+      <div style="font-size:9px;color:rgba(255,255,255,0.6);letter-spacing:1px;text-transform:uppercase;margin-top:2px;">ON-CHAIN DUEL · ${statusEn.toUpperCase()}</div>
+    </div>
+
+    <!-- VALUE BAR -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;border-bottom:1px solid #EEE9FC;background:#fafafa;">
+      <span style="font-size:9px;font-weight:700;color:#9CA3AF;letter-spacing:0.5px;font-family:monospace;">BNB TESTNET</span>
+      <span style="font-size:14px;font-weight:700;color:${valColor};">${totalPot} ${duel.token}</span>
+      <span style="font-size:9px;font-weight:600;padding:3px 9px;border-radius:10px;background:${stBg};color:${stColor};">${statusLabel}</span>
+    </div>
+
+    <!-- INFO -->
+    <div style="padding:10px;">
+      <div style="background:#F9F8FF;border-radius:8px;padding:8px 10px;margin-bottom:8px;border-left:2px solid #7C3AED;">
+        <div style="font-size:12px;font-weight:600;color:#1A1A2E;line-height:1.5;word-break:break-word;">${claimText}</div>
+      </div>
+
+      <!-- PLAYERS -->
+      <div style="display:grid;grid-template-columns:1fr 20px 1fr;gap:4px;align-items:center;margin-bottom:7px;">
+        <div style="background:#FFF1F2;border-radius:7px;padding:6px 7px;text-align:center;">
+          <div style="font-size:8px;color:#9CA3AF;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.3px;font-weight:600;">Challenger</div>
+          <div style="font-size:9px;color:#6B7280;font-family:monospace;margin-bottom:3px;">${duel.challenger.addr}</div>
+          <div style="font-size:16px;font-weight:700;color:#F43F5E;margin-top:2px;">${duel.challenger.amount} <span style="font-size:9px;font-weight:600;padding:2px 5px;border-radius:4px;background:#FFE4E6;color:#F43F5E;">${duel.token}</span></div>
+        </div>
+        <div style="text-align:center;">
+          <span style="font-size:8px;font-weight:700;color:#7C3AED;background:#F5F3FF;padding:2px 3px;border-radius:4px;">VS</span>
+        </div>
+        ${duel.defender ? `
+        <div style="background:#EFF6FF;border-radius:7px;padding:6px 7px;text-align:center;">
+          <div style="font-size:8px;color:#9CA3AF;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.3px;font-weight:600;">Defender</div>
+          <div style="font-size:8px;color:#6B7280;font-family:monospace;margin-bottom:2px;">${duel.defender.addr}</div>
+          <div style="font-size:16px;font-weight:700;color:#3B82F6;margin-top:2px;">${duel.defender.amount} <span style="font-size:9px;font-weight:600;padding:2px 5px;border-radius:4px;background:#DBEAFE;color:#3B82F6;">${duel.token}</span></div>
+        </div>` : `
+        <div style="background:#F9F8FF;border:1px dashed #C4B5FD;border-radius:7px;padding:6px 7px;text-align:center;min-height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;">
+          <span style="font-size:16px;color:#C4B5FD;">?</span>
+          <span style="font-size:7px;color:#C4B5FD;">Waiting</span>
+        </div>`}
+      </div>
+
+      ${duel.defender ? `
+      <!-- BAR -->
+      <div style="margin-bottom:7px;">
+        <div style="height:4px;border-radius:4px;background:#F3F0FB;overflow:hidden;display:flex;margin-bottom:2px;">
+          <div style="background:#F43F5E;width:${duel.supportRed}%;border-radius:4px 0 0 4px;"></div>
+          <div style="background:#3B82F6;flex:1;border-radius:0 4px 4px 0;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:8px;font-weight:600;">
+          <span style="color:#F43F5E;font-size:10px;font-weight:700;">${duel.supportRed}%</span>
+          <span style="color:#C4B5FD;font-size:9px;font-weight:500;">Community Vote</span>
+          <span style="color:#3B82F6;font-size:10px;font-weight:700;">${100-duel.supportRed}%</span>
+        </div>
+      </div>` : ''}
+
+      <!-- CHIPS -->
+      <div style="display:flex;gap:3px;flex-wrap:wrap;">
+        <span style="font-size:9px;font-weight:500;padding:3px 8px;border-radius:8px;background:#F9F8FF;border:1px solid #EEE9FC;color:#374151;">⏰ ${duel.expires}</span>
+        <span style="font-size:9px;font-weight:500;padding:3px 8px;border-radius:8px;background:#F9F8FF;border:1px solid #EEE9FC;color:#374151;">💰 ${totalPot} ${duel.token}</span>
+      </div>
+    </div>
+
+    <!-- FOOT -->
+    <div style="border-top:1px dashed #EEE9FC;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;background:#fafafa;">
+      <span style="font-size:9px;color:#C4B5FD;letter-spacing:0.3px;">verdictprotocol.online</span>
+      <span style="font-size:9px;font-weight:700;color:#9CA3AF;font-family:monospace;">#${duelId}</span>
+    </div>
+  </div>
+
+  <!-- POSTMARK -->
+  <svg style="position:absolute;top:18px;right:18px;opacity:0.12;transform:rotate(15deg);z-index:10;" width="72" height="72" viewBox="0 0 72 72">
+    <circle cx="36" cy="36" r="32" fill="none" stroke="${isOpen||isLive?'#7C3AED':'#059669'}" stroke-width="2.5"/>
+    <circle cx="36" cy="36" r="24" fill="none" stroke="${isOpen||isLive?'#7C3AED':'#059669'}" stroke-width="1"/>
+    <text x="36" y="32" text-anchor="middle" font-size="7" font-weight="700" fill="${isOpen||isLive?'#7C3AED':'#059669'}" font-family="monospace">VERDICT</text>
+    <text x="36" y="41" text-anchor="middle" font-size="6" fill="${isOpen||isLive?'#7C3AED':'#059669'}" font-family="monospace">${isLive?'PROTOCOL':'SETTLED'}</text>
+    <text x="36" y="50" text-anchor="middle" font-size="5.5" fill="${isOpen||isLive?'#7C3AED':'#059669'}" font-family="monospace">${date}</text>
+  </svg>
+</div>`;
+
+  document.body.appendChild(wrap);
+  await new Promise(r => setTimeout(r, 400));
+
+  try {
+    const h2c = (await import('html2canvas')).default;
+    const el = wrap.firstElementChild as HTMLElement;
+    const canvas = await h2c(el, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#E8E0D4',
+      logging: false,
+      onclone: (doc) => {
+        const imgs = doc.querySelectorAll('img');
+        imgs.forEach(img => { img.crossOrigin = 'anonymous'; });
+      }
+    });
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      try {
+        await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+        showToast('✓ 分享卡片已复制到剪贴板');
+      } catch {
+        const link = document.createElement('a');
+        link.download = 'verdict-'+duelId+'.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        showToast('✓ 图片已下载');
+      }
+    }, 'image/png');
+  } finally {
+    document.body.removeChild(wrap);
+  }
+}
+
+function showToast(msg: string) {
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);background:#7C3AED;color:#fff;padding:10px 22px;border-radius:20px;font-size:13px;font-weight:600;z-index:9999;font-family:DM Sans,sans-serif;box-shadow:0 4px 20px rgba(124,58,237,0.3);';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; t.style.transition='opacity 0.3s'; setTimeout(()=>t.remove(),300); }, 1800);
+}
+
 
 
 const CHAINS = [
@@ -866,7 +1165,7 @@ function DuelCard({ duel, t, onClick, onEnter }: { duel: Duel; t: typeof LANG['e
         <button onClick={e=>{e.stopPropagation();onEnter();}} className="flex-1 py-2.5 rounded-2xl text-[12px] font-bold text-white transition-all hover:opacity-90 active:scale-95" style={{background:isOpen?'#EA580C':'#7C3AED'}}>
           {isOpen ? (t.nav.arena === '广场' ? '⚔️ 接受挑战' : '⚔️ Accept Challenge') : t.card.enterDuel}
         </button>
-        <button onClick={e=>e.stopPropagation()} className="px-3 py-2.5 rounded-2xl text-[12px] font-semibold bg-[#F5F3FF] text-[#7C3AED] border border-[#DDD6FE] hover:bg-[#EDE9FD] transition-colors">
+        <button onClick={e=>{e.stopPropagation();generateStampImage(duel);}} className="px-3 py-2.5 rounded-2xl text-[12px] font-semibold bg-[#F5F3FF] text-[#7C3AED] border border-[#DDD6FE] hover:bg-[#EDE9FD] transition-colors" title="Share as image">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
         </button>
       </div>

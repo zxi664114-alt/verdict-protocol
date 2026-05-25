@@ -51,7 +51,7 @@ The Chrome extension auto-detects contract addresses on DexScreener, GMGN, four.
 
 **Data layer:** Moralis multi-chain API  
 **Inference layer:** Large Language Model (LLM)  
-**Live demo:** [@MemeCourt_Bot](https://t.me/MemeCourt_Bot)
+**Live demo:** [@VerdictProtocol_Bot]
 
 ### Commands
 
