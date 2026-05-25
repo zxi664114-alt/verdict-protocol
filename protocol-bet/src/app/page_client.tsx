@@ -483,6 +483,7 @@ const LANG = {
       claimLabel: '对决声明', rulingLabel: '裁定标准',
       judgeNote: 'AI法官将在到期时根据双方约定的裁定标准给出裁决。无需中间人，自动结算。',
       openSlot: '等待应战', takeSide: '站到另一边',
+      detail: { challenger:'发起方', defender:'接受方', communityVote:'社区支持率', audiencePool:'观众池', watching:'观战', duelInProgress:'⏳ 对决进行中 — 到期后可操作', duelInProgressSub:'到期后可提交证据申请裁定，或与对方达成共识直接结算。', judgeRed:'⚖️ 裁红方胜', judgeBlue:'⚖️ 裁蓝方胜', judging:'裁定中...', mutualSettle:'共识结算', submitEvidence:'提交证据', requestRuling:'申请裁定', copyLink:'复制分享链接', submitted:'✅ 已提交', waitingConfirm:'你已声明 ', waitingConfirmSuffix:' 胜出，等待对方在 48 小时内确认。', mutualTitle:'⚖️ 共识结算', mutualDesc:'你认为谁赢得了这场对决？对方需在 48小时 内确认，若双方结果一致则自动结算。', iWon:'我赢了', theyWon:'对方赢了', cancel:'取消', confirm:'确认提交', submitting:'提交中...' },
     },
     modal: {
       title: '⚔️ 发起新对决',
@@ -1139,7 +1140,7 @@ function DuelCard({ duel, t, onClick, onEnter }: { duel: Duel; t: typeof LANG['e
         </div>
         <div className="flex justify-between items-center">
           <span className="text-[11px] font-bold text-[#F43F5E]">{duel.supportRed}%</span>
-          <span className="text-[9px] text-[#C4B5FD] tracking-wide">{t.nav.arena === '广场' ? '社区投票' : 'Community Vote'}</span>
+          <span className="text-[9px] text-[#C4B5FD] tracking-wide">{t.nav.arena === '广场' ? '社区支持率' : 'Community Vote'}</span>
           <span className={`text-[11px] font-bold ${isAI?'text-[#7C3AED]':'text-[#3B82F6]'}`}>{100-duel.supportRed}%</span>
         </div>
       </div>
@@ -1221,6 +1222,10 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
 
   const [selectedSide, setSelectedSide] = useState<1|2|null>(null);
   const [betStake, setBetStake] = useState('');
+  const [showMutualModal, setShowMutualModal] = useState(false);
+  const [mutualChoice, setMutualChoice] = useState<'self'|'opponent'|null>(null);
+  const [mutualPending, setMutualPending] = useState(false);
+  const [mutualSubmitted, setMutualSubmitted] = useState<'self'|'opponent'|null>(null);
   const betStakeNum = parseFloat(betStake) || 0;
   const totalPot = duel.challenger.amount + (duel.defender?.amount ?? duel.challenger.amount);
   const supportPool = selectedSide === 1 ? totalPot*(duel.supportRed/100)+betStakeNum : totalPot*((100-duel.supportRed)/100)+betStakeNum;
@@ -1268,7 +1273,7 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
           <span style={{fontSize:'11px',fontWeight:500,color:c}}>{isRed ? '👑' : '⚔️'} {name}</span>
           {isMe && <span style={{fontSize:'9px',padding:'1px 5px',borderRadius:'20px',background:`${c}15`,color:c,border:`1px solid ${c}30`}}>나</span>}
         </div>
-        <div style={{fontSize:'10px',color:`${c}`,marginBottom:'3px',fontWeight:500,opacity:0.75}}>{isRed ? '发起方' : '接受方'}</div>
+        <div style={{fontSize:'10px',color:`${c}`,marginBottom:'3px',fontWeight:500,opacity:0.75}}>{isRed ? (t.nav.arena === '广场' ? '发起方' : 'Challenger') : (t.nav.arena === '广场' ? '接受方' : 'Defender')}</div>
         <div style={{fontSize:'15px',fontWeight:700,color:c}}>{amt} <span style={{fontSize:'9px',color:'#9CA3AF'}}>{token}</span></div>
       </div>
     );
@@ -1287,8 +1292,8 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
 
   const BaseInfo = () => (
     <>
-      <div><div style={S.label}>{t.detail.claimLabel}</div><div style={S.claimBox}>{claimText}</div></div>
-      {ruleText && <div><div style={S.label}>{t.detail.rulingLabel}</div><div style={S.ruleBox}>{ruleText}</div></div>}
+      <div><div style={S.label}>{t.claimLabel}</div><div style={S.claimBox}>{claimText}</div></div>
+      {ruleText && <div><div style={S.label}>{t.rulingLabel}</div><div style={S.ruleBox}>{ruleText}</div></div>}
     </>
   );
 
@@ -1310,7 +1315,7 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
       </div>
       <div style={{display:'flex',justifyContent:'space-between',marginTop:'3px'}}>
         <span style={{fontSize:'10px',fontWeight:500,color:'#F43F5E'}}>{duel.supportRed}%</span>
-        <span style={{fontSize:'9px',color:'#9CA3AF'}}>社区支持率</span>
+        <span style={{fontSize:'9px',color:'#9CA3AF'}}>{t.nav.arena === '广场' ? '社区支持率' : 'Community Vote'}</span>
         <span style={{fontSize:'10px',fontWeight:500,color:'#3B82F6'}}>{100-duel.supportRed}%</span>
       </div>
     </div>
@@ -1321,7 +1326,7 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
     <>
       <BaseInfo />
       <VsRow />
-      <div style={S.aiBox}><span style={{fontSize:'16px',flexShrink:0}}>⚖️</span><p style={{fontSize:'10px',color:'#7C3AED',lineHeight:1.5,margin:0}}>{t.detail.judgeNote}</p></div>
+      <div style={S.aiBox}><span style={{fontSize:'16px',flexShrink:0}}>⚖️</span><p style={{fontSize:'10px',color:'#7C3AED',lineHeight:1.5,margin:0}}>{t.detail?.judgeNote ?? ""}</p></div>
       <div style={S.statRow}>
         <StatBox label="到期" val={duel.expires} color="#D97706" />
         <StatBox label="需押注" val={`${wager} ${token}`} />
@@ -1379,7 +1384,7 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
       <div style={S.divider} />
       <div style={S.foot}>
         <Btn label={cancelPending ? '等待签名...' : cancelSuccess ? '✓ 已取消' : '取消对决'} color="rgba(255,107,107,0.6)" bg="rgba(255,107,107,0.06)" border="rgba(255,107,107,0.2)" onClick={() => onChainDuel && cancel(onChainDuel.id)} disabled={cancelPending} />
-        <Btn label="复制分享链接" color="#9CA3AF" bg="transparent" border="#E5E7EB"
+        <Btn label={t.nav.arena === '广场' ? '复制分享链接' : 'Copy Share Link'} color="#9CA3AF" bg="transparent" border="#E5E7EB"
           onClick={() => {
             const url = `${window.location.origin}${window.location.pathname}?duel=${onChainDuel?.id}`;
             navigator.clipboard?.writeText(url);
@@ -1397,25 +1402,30 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
       <SupportBar />
       <div style={S.statRow}>
         <StatBox label="剩余" val={duel.expires} color="rgba(250,199,117,0.9)" />
-        <StatBox label="观众池" val={`${(duel as any)._audiencePool?.toFixed(3) ?? '0.000'} ${token}`} />
-        <StatBox label="观战" val={String(duel.watchers)} />
+        <StatBox label={t.nav.arena === '广场' ? '观众池' : 'Audience Pool'} val={`${(duel as any)._audiencePool?.toFixed(3) ?? '0.000'} ${token}`} />
+        <StatBox label={t.nav.arena === '广场' ? '观战' : 'Watching'} val={String(duel.watchers)} />
       </div>
       <div style={S.phaseBox}>
-        <div style={{fontSize:'11px',fontWeight:500,color:'#1A1A2E',marginBottom:'3px',fontWeight:600}}>⏳ 对决进行中 — 到期后可操作</div>
-        <div style={{fontSize:'10px',color:'#374151',lineHeight:1.5}}>到期后可提交证据申请裁定，或与对方达成共识直接结算。</div>
+        <div style={{fontSize:'11px',fontWeight:600,color:'#1A1A2E',marginBottom:'3px'}}>{t.nav.arena === '广场' ? '⏳ 对决进行中 — 到期后可操作' : '⏳ Duel in progress — actions after expiry'}</div>
+        <div style={{fontSize:'10px',color:'#374151',lineHeight:1.5}}>{t.nav.arena === '广场' ? '到期后可提交证据申请裁定，或与对方达成共识直接结算。' : 'After expiry, submit evidence to request ruling, or reach consensus.'}</div>
       </div>
       {isJudge && <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px'}}>
-        <Btn label={settlePending ? '裁定中...' : '⚖️ 裁红方胜'} color="rgba(255,107,107,0.9)" bg="rgba(255,107,107,0.06)" border="rgba(255,107,107,0.3)" onClick={() => onChainDuel && settle(onChainDuel.id, 1)} disabled={settlePending} />
-        <Btn label={settlePending ? '裁定中...' : '⚖️ 裁蓝方胜'} color="rgba(107,159,255,0.9)" bg="rgba(107,159,255,0.06)" border="rgba(107,159,255,0.3)" onClick={() => onChainDuel && settle(onChainDuel.id, 2)} disabled={settlePending} />
+        <Btn label={settlePending ? t.nav.arena === '广场' ? '裁定中...' : 'Ruling...' : t.nav.arena === '广场' ? '⚖️ 裁红方胜' : '⚖️ Rule Red Wins'} color="rgba(255,107,107,0.9)" bg="rgba(255,107,107,0.06)" border="rgba(255,107,107,0.3)" onClick={() => onChainDuel && settle(onChainDuel.id, 1)} disabled={settlePending} />
+        <Btn label={settlePending ? t.nav.arena === '广场' ? '裁定中...' : 'Ruling...' : t.nav.arena === '广场' ? '⚖️ 裁蓝方胜' : '⚖️ Rule Blue Wins'} color="rgba(107,159,255,0.9)" bg="rgba(107,159,255,0.06)" border="rgba(107,159,255,0.3)" onClick={() => onChainDuel && settle(onChainDuel.id, 2)} disabled={settlePending} />
       </div>}
       <div style={S.divider} />
       <div style={{padding:'0 14px 14px',display:'flex',flexDirection:'column',gap:'6px'}}>
+        {mutualSubmitted && (
+          <div style={{background:'#F0FDF4',border:'1.5px solid #A7F3D0',borderRadius:'12px',padding:'10px 13px',fontSize:'12px',color:'#059669',lineHeight:1.5}}>
+            {t.nav.arena === '广场' ? '你已声明 ' : 'You declared '}<strong>{mutualSubmitted === 'self' ? myLabel : oppLabel}</strong>{t.nav.arena === '广场' ? ' 胜出，等待对方在 48 小时内确认。' : ' as winner. Waiting for opponent to confirm within 48h.'}
+          </div>
+        )}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'6px'}}>
-          <Btn label="共识结算" color="rgba(74,222,128,0.9)" bg="rgba(74,222,128,0.06)" border="rgba(74,222,128,0.3)" disabled={true} />
-          <Btn label="提交证据" color="rgba(107,159,255,0.9)" bg="rgba(107,159,255,0.06)" border="rgba(107,159,255,0.3)" disabled={true} />
-          <Btn label="申请裁定" color="rgba(250,199,117,0.9)" bg="rgba(250,199,117,0.06)" border="rgba(250,199,117,0.3)" disabled={true} />
+          <Btn label={mutualSubmitted ? t.nav.arena === '广场' ? '✅ 已提交' : '✅ Submitted' : t.nav.arena === '广场' ? '共识结算' : 'Mutual Settle'} color={mutualSubmitted ? '#059669' : '#7C3AED'} bg={mutualSubmitted ? '#ECFDF5' : '#F5F3FF'} border={mutualSubmitted ? '#A7F3D0' : '#DDD6FE'} onClick={mutualSubmitted ? undefined : () => setShowMutualModal(true)} disabled={!!mutualSubmitted} />
+          <Btn label={t.nav.arena === '广场' ? '提交证据' : 'Submit Evidence'} color="#3B82F6" bg="#EFF6FF" border="#DBEAFE" disabled={true} />
+          <Btn label={t.nav.arena === '广场' ? '申请裁定' : 'Request Ruling'} color="#D97706" bg="#FFFBEB" border="#FDE68A" disabled={true} />
         </div>
-        <Btn label="复制分享链接" color="#9CA3AF" bg="transparent" border="#E5E7EB"
+        <Btn label={t.nav.arena === '广场' ? '复制分享链接' : 'Copy Share Link'} color="#9CA3AF" bg="transparent" border="#E5E7EB"
           onClick={() => {
             const url = `${window.location.origin}${window.location.pathname}?duel=${onChainDuel?.id}`;
             navigator.clipboard?.writeText(url);
@@ -1433,8 +1443,8 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
       <SupportBar />
       <div style={S.statRow}>
         <StatBox label="剩余" val={duel.expires} color="rgba(250,199,117,0.9)" />
-        <StatBox label="观众池" val={`${(duel as any)._audiencePool?.toFixed(3) ?? '0.000'} ${token}`} />
-        <StatBox label="观战" val={String(duel.watchers)} />
+        <StatBox label={t.nav.arena === '广场' ? '观众池' : 'Audience Pool'} val={`${(duel as any)._audiencePool?.toFixed(3) ?? '0.000'} ${token}`} />
+        <StatBox label={t.nav.arena === '广场' ? '观战' : 'Watching'} val={String(duel.watchers)} />
       </div>
       <div style={S.divider} />
       <div style={{fontSize:'9px',letterSpacing:'0.08em',textTransform:'uppercase' as const,color:'#374151',marginBottom:'6px'}}>选择支持方</div>
@@ -1497,8 +1507,8 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
       </div>
       <div style={S.disputeNote}>⚠️ 质疑窗口期内（48h），任何人可对裁定结果提起质疑，需支付 5% 保证金。</div>
       {isJudge && <div style={{padding:'0 0 8px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px'}}>
-        <Btn label={settlePending ? '裁定中...' : '⚖️ 裁红方胜'} color="rgba(255,107,107,0.9)" bg="rgba(255,107,107,0.06)" border="rgba(255,107,107,0.3)" onClick={() => onChainDuel && settle(onChainDuel.id, 1)} disabled={settlePending} />
-        <Btn label={settlePending ? '裁定中...' : '⚖️ 裁蓝方胜'} color="rgba(107,159,255,0.9)" bg="rgba(107,159,255,0.06)" border="rgba(107,159,255,0.3)" onClick={() => onChainDuel && settle(onChainDuel.id, 2)} disabled={settlePending} />
+        <Btn label={settlePending ? t.nav.arena === '广场' ? '裁定中...' : 'Ruling...' : t.nav.arena === '广场' ? '⚖️ 裁红方胜' : '⚖️ Rule Red Wins'} color="rgba(255,107,107,0.9)" bg="rgba(255,107,107,0.06)" border="rgba(255,107,107,0.3)" onClick={() => onChainDuel && settle(onChainDuel.id, 1)} disabled={settlePending} />
+        <Btn label={settlePending ? t.nav.arena === '广场' ? '裁定中...' : 'Ruling...' : t.nav.arena === '广场' ? '⚖️ 裁蓝方胜' : '⚖️ Rule Blue Wins'} color="rgba(107,159,255,0.9)" bg="rgba(107,159,255,0.06)" border="rgba(107,159,255,0.3)" onClick={() => onChainDuel && settle(onChainDuel.id, 2)} disabled={settlePending} />
       </div>}
       <div style={S.foot}>
         <Btn label={disputePending ? '等待签名...' : disputeSuccess ? '✓ 质疑已提交' : '🚨 提起质疑'} color="rgba(250,199,117,0.9)" bg="rgba(250,199,117,0.06)" border="rgba(250,199,117,0.3)"
@@ -1525,7 +1535,69 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
     return <ViewActiveAudience />;
   };
 
+  const isZh = t.nav.arena === '广场';
+  const myLabel = isMyRed ? (isZh ? '红方（我）' : 'Red (Me)') : (isZh ? '蓝方（我）' : 'Blue (Me)');
+  const oppLabel = isMyRed ? (isZh ? '蓝方（对方）' : 'Blue (Them)') : (isZh ? '红方（对方）' : 'Red (Them)');
+  const myColor = isMyRed ? '#F43F5E' : '#3B82F6';
+  const oppColor = isMyRed ? '#3B82F6' : '#F43F5E';
+
   return (
+    <>
+    {showMutualModal && (
+      <div style={{position:'fixed',inset:0,background:'rgba(100,80,160,0.25)',zIndex:60,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px'}}
+        onClick={() => setShowMutualModal(false)}>
+        <div style={{background:'#fff',border:'1.5px solid #EEE9FC',borderRadius:'20px',width:'100%',maxWidth:'380px',overflow:'hidden',boxShadow:'0 8px 40px rgba(124,58,237,0.12)'}}
+          onClick={e => e.stopPropagation()}>
+          <div style={{background:'#F7F5FF',borderBottom:'1px solid #EEE9FC',padding:'14px 18px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div style={{fontSize:'14px',fontWeight:600,color:'#1A1A2E'}}>{t.nav.arena === '广场' ? '⚖️ 共识结算' : '⚖️ Mutual Settlement'}</div>
+            <button onClick={() => setShowMutualModal(false)} style={{color:'#9CA3AF',fontSize:'20px',background:'none',border:'none',cursor:'pointer',lineHeight:1}}>×</button>
+          </div>
+          <div style={{padding:'18px'}}>
+            <div style={{fontSize:'13px',color:'#374151',marginBottom:'16px',lineHeight:1.6}}>
+              {t.nav.arena === '广场' ? '你认为谁赢得了这场对决？对方需在 48小时 内确认，若双方结果一致则自动结算。' : 'Who do you think won this duel? Opponent has 48h to confirm. If both agree, settlement is automatic.'}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'16px'}}>
+              <button onClick={() => setMutualChoice('self')}
+                style={{padding:'14px 10px',borderRadius:'14px',border:`2px solid ${mutualChoice==='self' ? myColor : '#EEE9FC'}`,background:mutualChoice==='self' ? `${myColor}18` : '#F9F8FF',cursor:'pointer',transition:'all 0.15s'}}>
+                <div style={{fontSize:'20px',marginBottom:'6px'}}>🏆</div>
+                <div style={{fontSize:'12px',fontWeight:600,color:mutualChoice==='self' ? myColor : '#374151'}}>{t.nav.arena === '广场' ? '我赢了' : 'I Won'}</div>
+                <div style={{fontSize:'10px',color:'#9CA3AF',marginTop:'2px'}}>{myLabel}</div>
+              </button>
+              <button onClick={() => setMutualChoice('opponent')}
+                style={{padding:'14px 10px',borderRadius:'14px',border:`2px solid ${mutualChoice==='opponent' ? oppColor : '#EEE9FC'}`,background:mutualChoice==='opponent' ? `${oppColor}18` : '#F9F8FF',cursor:'pointer',transition:'all 0.15s'}}>
+                <div style={{fontSize:'20px',marginBottom:'6px'}}>🤝</div>
+                <div style={{fontSize:'12px',fontWeight:600,color:mutualChoice==='opponent' ? oppColor : '#374151'}}>{t.nav.arena === '广场' ? '对方赢了' : 'They Won'}</div>
+                <div style={{fontSize:'10px',color:'#9CA3AF',marginTop:'2px'}}>{oppLabel}</div>
+              </button>
+            </div>
+            {mutualChoice && (
+              <div style={{background:'#F5F3FF',borderRadius:'12px',padding:'10px 13px',marginBottom:'14px',fontSize:'12px',color:'#5B21B6',lineHeight:1.5}}>
+                {t.nav.arena === '广场' ? '你声明 ' : 'You declared '}<strong>{mutualChoice === 'self' ? myLabel : oppLabel}</strong>{t.nav.arena === '广场' ? ' 赢得了此次对决。提交后等待对方在 48 小时内确认。' : ' won this duel. Submit to wait for opponent confirmation within 48h.'}
+              </div>
+            )}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px'}}>
+              <button onClick={() => { setShowMutualModal(false); setMutualChoice(null); }}
+                style={{padding:'11px',borderRadius:'12px',fontSize:'13px',fontWeight:500,color:'#9CA3AF',border:'1px solid #E5E7EB',background:'transparent',cursor:'pointer'}}>
+                {t.nav.arena === '广场' ? '取消' : 'Cancel'}
+              </button>
+              <button disabled={!mutualChoice || mutualPending}
+                onClick={async () => {
+                  if (!mutualChoice) return;
+                  setMutualPending(true);
+                  await new Promise(r => setTimeout(r, 800));
+                  setMutualSubmitted(mutualChoice);
+                  setMutualPending(false);
+                  setShowMutualModal(false);
+                  setMutualChoice(null);
+                }}
+                style={{padding:'11px',borderRadius:'12px',fontSize:'13px',fontWeight:600,border:'none',cursor:mutualChoice?'pointer':'not-allowed',background:mutualChoice?'#7C3AED':'#E5E7EB',color:mutualChoice?'#fff':'#9CA3AF',transition:'all 0.15s'}}>
+                {mutualPending ? t.nav.arena === '广场' ? '提交中...' : 'Submitting...' : t.nav.arena === '广场' ? '确认提交' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
     <div style={S.overlay} onClick={onClose}>
       <div style={S.modal} onClick={e=>e.stopPropagation()}>
         <div style={S.head}>
@@ -1539,6 +1611,7 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
         <div style={S.body}>{renderBody()}</div>
       </div>
     </div>
+    </>
   );
 }
 
