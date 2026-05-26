@@ -1,8 +1,8 @@
 // src/app/api/notify/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
-const CONTRACT = '0xa0A997cF05F7Baf21becEA4130209fD7C7D1A994';
-const RPC = 'https://data-seed-prebsc-1-s1.bnbchain.org:8545';
+const CONTRACT = '0xE731a80668Ad0439a6B55e57f65C1D7885827566';
+const RPC = 'https://rpc.sepolia.mantle.xyz';
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const KV_URL = process.env.KV_REST_API_URL || '';
 const KV_TOKEN = process.env.KV_REST_API_TOKEN || '';

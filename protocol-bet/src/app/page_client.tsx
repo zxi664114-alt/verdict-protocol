@@ -1356,7 +1356,7 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
                 const wagerHex = '0x' + (wagerBigInt ?? BigInt(Math.round(parseFloat(wager) * 1e18))).toString(16);
                 await (window as any).ethereum.request({
                   method: 'eth_sendTransaction',
-                  params: [{ from: accounts[0], to: '0xa0A997cF05F7Baf21becEA4130209fD7C7D1A994', value: wagerHex, data }]
+                  params: [{ from: accounts[0], to: '0xE731a80668Ad0439a6B55e57f65C1D7885827566', value: wagerHex, data }]
                 });
               } catch(e: any) { console.error('accept error:', e); }
             } else if (onChainDuel) {
