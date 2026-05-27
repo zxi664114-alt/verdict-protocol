@@ -1248,7 +1248,7 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel, refetch }: { duel: Due
   const [mutualChoice, setMutualChoice] = useState<'self'|'opponent'|null>(null);
   const [mutualPending, setMutualPending] = useState(false);
   const [mutualSubmitted, setMutualSubmitted] = useState<'self'|'opponent'|null>(null);
-  const [settleSuccess, setSettleSuccess] = useState<{winner: string, amount: string} | null>(null);
+  const [settleResult, setSettleResult] = useState<{winner: string, amount: string} | null>(null);
   const [opponentClaim, setOpponentClaim] = useState<number>(0); // 0=none, 1=Red, 2=Blue
 
   // Read opponent's on-chain mutualClaim
@@ -1590,19 +1590,19 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel, refetch }: { duel: Due
 
   return (
     <>
-    {settleSuccess && (
+    {settleResult && (
       <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px'}}
-        onClick={() => setSettleSuccess(null)}>
+        onClick={() => setSettleResult(null)}>
         <div style={{background:'#fff',borderRadius:'24px',padding:'32px 24px',textAlign:'center',maxWidth:'320px',width:'100%',boxShadow:'0 20px 60px rgba(0,0,0,0.2)'}}>
           <div style={{fontSize:'56px',marginBottom:'12px'}}>🎉</div>
           <div style={{fontSize:'20px',fontWeight:700,color:'#059669',marginBottom:'8px'}}>
             {t.nav.arena === '广场' ? '结算成功！' : 'Settled!'}
           </div>
           <div style={{fontSize:'14px',color:'#374151',marginBottom:'4px'}}>
-            {t.nav.arena === '广场' ? '胜方：' : 'Winner: '}<strong>{settleSuccess.winner}</strong>
+            {t.nav.arena === '广场' ? '胜方：' : 'Winner: '}<strong>{settleResult.winner}</strong>
           </div>
           <div style={{fontSize:'18px',fontWeight:700,color:'#7C3AED',marginTop:'12px'}}>
-            +{settleSuccess.amount}
+            +{settleResult.amount}
           </div>
           <div style={{fontSize:'11px',color:'#9CA3AF',marginTop:'8px'}}>
             {t.nav.arena === '广场' ? '点击任意处关闭' : 'Tap anywhere to close'}
@@ -1702,8 +1702,8 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel, refetch }: { duel: Due
                             const wager2 = BigInt('0x'+r2.slice(3*64,4*64));
                             const amt2 = (parseFloat(fmtEther(wager2 * 2n)) * 0.98).toFixed(4);
                             const winnerLabel = winner2 === 1 ? (isMyRed ? (t.nav.arena==='广场'?'你（红方）':'You (Red)') : (t.nav.arena==='广场'?'对方（红方）':'Opponent (Red)')) : (isMyRed ? (t.nav.arena==='广场'?'对方（蓝方）':'Opponent (Blue)') : (t.nav.arena==='广场'?'你（蓝方）':'You (Blue)'));
-                            setSettleSuccess({winner: winnerLabel, amount: amt2 + ' ' + token});
-                            setTimeout(() => setSettleSuccess(null), 5000);
+                            setSettleResult({winner: winnerLabel, amount: amt2 + ' ' + token});
+                            setTimeout(() => setSettleResult(null), 5000);
                           }
                         } catch {}
                       }, 2500);
