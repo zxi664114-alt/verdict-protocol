@@ -1964,7 +1964,6 @@ function MyDuelsPage({ t, onGoToArena, onChainDuels, chainId, onViewDuel }: { t:
     d.blue.toLowerCase() === address.toLowerCase()
   ) : [];
 
-  const now = BigInt(Math.floor(Date.now() / 1000));
   const activeDuels = myDuels.filter(d => d.status === DuelStatus.Open || d.status === DuelStatus.Active).sort((a,b) => b.id - a.id);
   const expiredDuels = activeDuels.filter(d => d.deadline < now);
   const liveDuels = activeDuels.filter(d => d.deadline >= now);
