@@ -1127,7 +1127,7 @@ function DuelCard({ duel, t, onClick, onEnter }: { duel: Duel; t: typeof LANG['e
         ) : (
           <div className="rounded-2xl p-3 flex flex-col items-center justify-center gap-1.5" style={{background:'#F9F8FF',border:'1.5px dashed #C4B5FD',minHeight:'84px'}}>
             <div className="text-3xl text-[#C4B5FD]">?</div>
-            <div className="text-[10px] font-medium text-[#C4B5FD]">等待应战</div>
+            <div className="text-[10px] font-medium text-[#C4B5FD]">{t.nav.arena === '广场' ? '等待应战' : 'Waiting'}</div>
           </div>
         )}
       </div>
@@ -1302,7 +1302,7 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
       <SideCard side="red" />
       <div style={{fontSize:'10px',color:'#9CA3AF',textAlign:'center',fontWeight:500}}>VS</div>
       {duel.defender ? <SideCard side="blue" /> :
-        <div style={S.sideDash}><div style={{fontSize:'11px',color:'#9CA3AF'}}>等待应战</div><div style={{fontSize:'20px',color:'#C4B5FD',lineHeight:1.2}}>?</div></div>
+        <div style={S.sideDash}><div style={{fontSize:'11px',color:'#9CA3AF'}}>{t.nav.arena === '广场' ? '等待应战' : 'Waiting'}</div><div style={{fontSize:'20px',color:'#C4B5FD',lineHeight:1.2}}>?</div></div>
       }
     </div>
   );
@@ -1336,7 +1336,7 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
       <div style={S.foot}>
         <Btn label="取消" color="#9CA3AF" bg="transparent" border="#E5E7EB" onClick={onClose} />
         <Btn
-          label={!address ? '🔗 连接钱包后参与' : isWrongNetwork ? '⚠️ 切换到 BNB Testnet' : acceptSuccess ? '✓ 已接受!' : acceptConfirming ? '确认中...' : acceptPending ? '等待签名...' : '⚔️ 接受挑战'}
+          label={!address ? (t.nav.arena === '广场' ? '🔗 连接钱包后参与' : '🔗 Connect Wallet') : isWrongNetwork ? (t.nav.arena === '广场' ? '⚠️ 切换网络' : '⚠️ Switch Network') : acceptSuccess ? (t.nav.arena === '广场' ? '✓ 已接受!' : '✓ Accepted!') : acceptConfirming ? (t.nav.arena === '广场' ? '确认中...' : 'Confirming...') : acceptPending ? (t.nav.arena === '广场' ? '等待签名...' : 'Signing...') : (t.nav.arena === '广场' ? '⚔️ 接受挑战' : '⚔️ Accept Challenge')}
           color={isWrongNetwork ? '#D97706' : '#fff'} bg={isWrongNetwork ? '#FFF7ED' : '#7C3AED'} border={isWrongNetwork ? '#FDE68A' : '#7C3AED'}
           onClick={async () => {
             const chainDuelId = onChainDuel?.id ?? (duel as any)._onChainId;
@@ -1383,7 +1383,7 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
       </div>
       <div style={S.divider} />
       <div style={S.foot}>
-        <Btn label={cancelPending ? '等待签名...' : cancelSuccess ? '✓ 已取消' : '取消对决'} color="rgba(255,107,107,0.6)" bg="rgba(255,107,107,0.06)" border="rgba(255,107,107,0.2)" onClick={() => onChainDuel && cancel(onChainDuel.id)} disabled={cancelPending} />
+        <Btn label={cancelPending ? (t.nav.arena === '广场' ? '等待签名...' : 'Signing...') : cancelSuccess ? (t.nav.arena === '广场' ? '✓ 已取消' : '✓ Cancelled') : (t.nav.arena === '广场' ? '取消对决' : 'Cancel Duel')} color="rgba(255,107,107,0.6)" bg="rgba(255,107,107,0.06)" border="rgba(255,107,107,0.2)" onClick={() => onChainDuel && cancel(onChainDuel.id)} disabled={cancelPending} />
         <Btn label={t.nav.arena === '广场' ? '复制分享链接' : 'Copy Share Link'} color="#9CA3AF" bg="transparent" border="#E5E7EB"
           onClick={() => {
             const url = `${window.location.origin}${window.location.pathname}?duel=${onChainDuel?.id}`;
@@ -1477,7 +1477,7 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
       <div style={S.foot}>
         <Btn label="取消" color="rgba(255,255,255,0.4)" bg="transparent" border="rgba(255,255,255,0.15)" onClick={onClose} />
         <Btn
-          label={!address && !isMock ? '🔗 连接钱包后参与' : isWrongNetwork && !isMock ? '⚠️ 切换到 BNB Testnet' : isMock ? '🎮 演示模式' : betSuccess ? '✓ 押注成功!' : betConfirming ? '确认中...' : betPending ? '等待签名...' : '🔒 确认押注'}
+          label={!address && !isMock ? '🔗 连接钱包后参与' : isWrongNetwork && !isMock ? (t.nav.arena === '广场' ? '⚠️ 切换网络' : '⚠️ Switch Network') : isMock ? '🎮 演示模式' : betSuccess ? '✓ 押注成功!' : betConfirming ? '确认中...' : betPending ? '等待签名...' : '🔒 确认押注'}
           color={isWrongNetwork && !isMock ? 'rgba(250,199,117,0.9)' : '#6b9fff'} bg={isWrongNetwork && !isMock ? 'rgba(250,199,117,0.06)' : 'rgba(107,159,255,0.1)'} border={isWrongNetwork && !isMock ? 'rgba(250,199,117,0.4)' : 'rgba(107,159,255,0.4)'}
           onClick={() => { if(!address && !isMock){ openConnectModal?.(); return; } if(isWrongNetwork && !isMock){ switchChain({ chainId: targetChainId }); return; } if(!isMock && selectedSide && betStakeNum && onChainDuel) placeBet(onChainDuel.id, selectedSide, betStake); }}
           disabled={isMock || betPending || betConfirming || (!!address && !isWrongNetwork && (!selectedSide || !betStakeNum))}
