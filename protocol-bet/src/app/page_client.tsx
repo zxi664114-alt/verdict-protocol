@@ -2122,8 +2122,8 @@ function AppInner() {
 
   // 统计数据
   const totalPotBigInt = onChainDuels.reduce((acc, d) => acc + d.wager * 2n, 0n);
-  const [usdPrices, setUsdPrices] = React.useState<{MNT?: number, BNB?: number, tBNB?: number}>({});
-  React.useEffect(() => {
+  const [usdPrices, setUsdPrices] = useState<{MNT?: number, BNB?: number, tBNB?: number}>({});
+  useEffect(() => {
     fetch('https://api.coingecko.com/api/v3/simple/price?ids=mantle,binancecoin&vs_currencies=usd')
       .then(r => r.json())
       .then(data => setUsdPrices({ MNT: data.mantle?.usd, BNB: data.binancecoin?.usd, tBNB: data.binancecoin?.usd }))
