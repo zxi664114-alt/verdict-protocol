@@ -1931,6 +1931,15 @@ function MyDuelCard({ record, t, onClaim, claimingId, fullWidth = false, onViewD
             <button onClick={()=>onClaim(record.id)} className={`flex-1 py-2.5 rounded-2xl text-[11px] font-semibold transition-all ${isClaiming ? 'bg-[#ECFDF5] text-[#059669] border border-[#A7F3D0]' : 'text-white hover:opacity-90'}`} style={isClaiming ? {} : {background:'#D97706'}}>{isClaiming ? '✓ 已领取!' : m.actions.claim}</button>
             <button className="px-3 py-2.5 rounded-2xl text-[11px] font-semibold text-[#F43F5E] border border-[#FFE4E6] bg-[#FFF1F2] hover:bg-[#FFE4E6] transition-colors flex-shrink-0">{m.actions.dispute}</button>
           </div>
+        ) : (record as any).isExpired && record.side === 'red' && !record.result ? (
+          <div className="flex gap-2">
+            <button onClick={onViewDuel} className="flex-1 py-2.5 rounded-2xl text-[11px] font-semibold text-[#D97706] border border-[#FDE68A] bg-[#FFFBEB] hover:bg-[#FEF3C7] transition-colors">
+              {t.nav.arena === '广场' ? '↩️ 申请退款' : '↩️ Request Refund'}
+            </button>
+            <button onClick={onViewDuel} className="px-3 py-2.5 rounded-2xl text-[11px] font-semibold text-[#7C3AED] border border-[#DDD6FE] bg-[#F5F3FF] hover:bg-[#EDE9FD] transition-colors flex-shrink-0">
+              {m.actions.viewDuel}
+            </button>
+          </div>
         ) : (
           <button onClick={onViewDuel} className="w-full py-2.5 rounded-2xl text-[11px] font-semibold text-[#7C3AED] border border-[#DDD6FE] bg-[#F5F3FF] hover:bg-[#EDE9FD] transition-colors">{m.actions.viewDuel}</button>
         )}
@@ -1955,8 +1964,13 @@ function MyDuelsPage({ t, onGoToArena, onChainDuels, chainId, onViewDuel }: { t:
     d.blue.toLowerCase() === address.toLowerCase()
   ) : [];
 
+  const now = BigInt(Math.floor(Date.now() / 1000));
   const activeDuels = myDuels.filter(d => d.status === DuelStatus.Open || d.status === DuelStatus.Active).sort((a,b) => b.id - a.id);
-  const claimableDuels = myDuels.filter(d => d.status === DuelStatus.Settled).sort((a,b) => b.id - a.id);
+  const expiredDuels = activeDuels.filter(d => d.deadline < now);
+  const liveDuels = activeDuels.filter(d => d.deadline >= now);
+  // Mutual settle pays directly — no manual claim needed for now
+  // Future: judge-settled duels with dispute window will appear here
+  const claimableDuels: OnChainDuel[] = [];
   const historyDuels = myDuels.filter(d => d.status === DuelStatus.Settled || d.status === DuelStatus.Cancelled).sort((a,b) => b.id - a.id);
 
   const tabCounts = { active: activeDuels.length, claimable: claimableDuels.length, history: historyDuels.length };
@@ -2093,6 +2107,7 @@ function MyDuelsPage({ t, onGoToArena, onChainDuels, chainId, onViewDuel }: { t:
             {currentDuels.map(d => {
               const myAddr2 = ((address || (typeof window !== 'undefined' ? (window as any).ethereum?.selectedAddress : '') || '')).toLowerCase();
               const isRed = !!(myAddr2 && d.red.toLowerCase() === myAddr2);
+              const isExpired = d.deadline < now;
               const mySide = isRed ? 'red' : 'blue';
               const opponentAddr = isRed ? d.blue : d.red;
               const claimText = typeof window !== 'undefined' ? localStorage.getItem('claim_' + d.claimHash) || `#${d.id} — on-chain duel` : `#${d.id}`;
@@ -2110,8 +2125,9 @@ function MyDuelsPage({ t, onGoToArena, onChainDuels, chainId, onViewDuel }: { t:
                 token,
                 myStaked: parseFloat(fmtEther(d.wager)).toFixed(3),
                 result: isClaimable ? (d.winner === (isRed ? 1 : 2) ? 'win' as const : 'loss' as const) : undefined,
-                prize: isClaimable && d.winner === (isRed ? 1 : 2) ? parseFloat(fmtEther(d.wager * 2n)).toFixed(3) : undefined,
-                expires: formatDeadline(d.deadline),
+                prize: isClaimable && d.winner !== 0 ? (d.winner === (isRed ? 1 : 2) ? parseFloat(fmtEther(d.wager * 196n / 100n)).toFixed(4) : '0') : undefined,
+                expires: isExpired ? (t.nav.arena === '广场' ? '⏰ 已过期' : '⏰ Expired') : formatDeadline(d.deadline),
+                isExpired,
                 network: (d as any).chainName ?? (chainId === 97 ? 'BNB Testnet' : chainId === 5003 ? 'Mantle Sepolia' : 'Unknown'),
                 onChainId: d.id,
               };
