@@ -1185,7 +1185,28 @@ function DuelCard({ duel, t, onClick, onEnter }: { duel: Duel; t: typeof LANG['e
 
 
 // ─── DuelDetailModal — 五种视角统一入口 ─────────────────────────────────────
-function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typeof LANG['en']; onClose: () => void; onChainDuel?: OnChainDuel }) {
+
+async function readMutualClaim(rpc: string, contract: string, duelId: number, addr: string): Promise<number> {
+  try {
+    // mutualClaim(uint256,address) - need to compute selector
+    // keccak256("mutualClaim(uint256,address)") = we'll use eth_call with storage slot
+    // Actually mutualClaim is a public mapping so we can call it directly
+    // function selector for mutualClaim: keccak256("mutualClaim(uint256,address)")[:4]
+    const idHex = duelId.toString(16).padStart(64, '0');
+    const addrHex = addr.toLowerCase().replace('0x','').padStart(64, '0');
+    // selector for mutualClaim(uint256,address) = 0x... computed offline
+    const data = '0x2599522f' + idHex + addrHex; // mutualClaim(uint256,address)
+    const res = await fetch(rpc, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: contract, data }, 'latest'], id: 1 })
+    });
+    const json = await res.json();
+    return parseInt(json.result || '0x0', 16);
+  } catch { return 0; }
+}
+
+function DuelDetailModal({ duel, t, onClose, onChainDuel, refetch }: { duel: Duel; t: typeof LANG['en']; onClose: () => void; onChainDuel?: OnChainDuel; refetch?: () => void }) {
   const { address } = useAccount();
   const claimText = (duel as any)._claimText || (onChainDuel ? `#${onChainDuel.id} — on-chain duel` : duel.id);
   const ruleText = (duel as any)._ruleText || '';
@@ -1226,6 +1247,18 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
   const [mutualChoice, setMutualChoice] = useState<'self'|'opponent'|null>(null);
   const [mutualPending, setMutualPending] = useState(false);
   const [mutualSubmitted, setMutualSubmitted] = useState<'self'|'opponent'|null>(null);
+  const [opponentClaim, setOpponentClaim] = useState<number>(0); // 0=none, 1=Red, 2=Blue
+
+  // Read opponent's on-chain mutualClaim
+  useEffect(() => {
+    if (!onChainDuel || !isParticipant) return;
+    const opponentAddr = isMyRed ? onChainDuel.blue : onChainDuel.red;
+    if (!opponentAddr || opponentAddr === '0x0000000000000000000000000000000000000000') return;
+    const rpc = targetChainId === 5003 ? 'https://rpc.sepolia.mantle.xyz' : 'https://data-seed-prebsc-1-s1.bnbchain.org:8545';
+    const contract = targetChainId === 5003 ? '0xE731a80668Ad0439a6B55e57f65C1D7885827566' : '0xa0A997cF05F7Baf21becEA4130209fD7C7D1A994';
+    const originalId = (onChainDuel as any).originalId ?? onChainDuel.id;
+    readMutualClaim(rpc, contract, originalId, opponentAddr).then(setOpponentClaim);
+  }, [onChainDuel?.id, isParticipant]);
   const betStakeNum = parseFloat(betStake) || 0;
   const totalPot = duel.challenger.amount + (duel.defender?.amount ?? duel.challenger.amount);
   const supportPool = selectedSide === 1 ? totalPot*(duel.supportRed/100)+betStakeNum : totalPot*((100-duel.supportRed)/100)+betStakeNum;
@@ -1415,6 +1448,11 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
       </div>}
       <div style={S.divider} />
       <div style={{padding:'0 14px 14px',display:'flex',flexDirection:'column',gap:'6px'}}>
+        {opponentClaim > 0 && !mutualSubmitted && (
+          <div style={{background:'#FFF7ED',border:'1px solid #FDE68A',borderRadius:'12px',padding:'10px 13px',marginBottom:'8px',fontSize:'12px',color:'#D97706'}}>
+            ⚠️ {t.nav.arena === '广场' ? `对方已声明 ${opponentClaim === 1 ? '红方' : '蓝方'} 胜出，请确认你的结果` : `Opponent claimed ${opponentClaim === 1 ? 'Red' : 'Blue'} wins. Please confirm your result`}
+          </div>
+        )}
         {mutualSubmitted && (
           <div style={{background:'#F0FDF4',border:'1.5px solid #A7F3D0',borderRadius:'12px',padding:'10px 13px',fontSize:'12px',color:'#059669',lineHeight:1.5}}>
             {t.nav.arena === '广场' ? '你已声明 ' : 'You declared '}<strong>{mutualSubmitted === 'self' ? myLabel : oppLabel}</strong>{t.nav.arena === '广场' ? ' 胜出，等待对方在 48 小时内确认。' : ' as winner. Waiting for opponent to confirm within 48h.'}
@@ -1618,6 +1656,8 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
                       setMutualSubmitted(mutualChoice);
                       setShowMutualModal(false);
                       setMutualChoice(null);
+                      refetch?.();
+                      setTimeout(() => refetch?.(), 3000);
                     } else {
                       alert(t.nav.arena === '广场' ? '交易失败，请重试' : 'Transaction failed, please retry');
                     }
@@ -1652,8 +1692,8 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
   );
 }
 
-function DuelModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typeof LANG['en']; onClose: () => void; onChainDuel?: OnChainDuel }) {
-  return <DuelDetailModal duel={duel} t={t} onClose={onClose} onChainDuel={onChainDuel} />;
+function DuelModal({ duel, t, onClose, onChainDuel, refetch }: { duel: Duel; t: typeof LANG['en']; onClose: () => void; onChainDuel?: OnChainDuel; refetch?: () => void }) {
+  return <DuelDetailModal duel={duel} t={t} onClose={onClose} onChainDuel={onChainDuel} refetch={refetch} />;
 }
 
 
@@ -2239,7 +2279,7 @@ function AppInner() {
         }} />
       )}
       {showModal && <IssueModal t={t} onClose={() => { setShowModal(false); refetch(); }} chainId={chainId} />}
-      {selectedDuel && <DuelModal duel={selectedDuel} t={t} onClose={() => {
+      {selectedDuel && <DuelModal duel={selectedDuel} t={t} refetch={refetch} onClose={() => {
         setSelectedDuel(null);
         setSelectedOnChainDuel(undefined);
         refetch();
