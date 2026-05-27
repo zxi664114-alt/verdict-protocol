@@ -1334,7 +1334,7 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
       </div>
       <div style={S.divider} />
       <div style={S.foot}>
-        <Btn label="取消" color="#9CA3AF" bg="transparent" border="#E5E7EB" onClick={onClose} />
+        <Btn label={t.nav.arena === '广场' ? '取消' : 'Cancel'} color="#9CA3AF" bg="transparent" border="#E5E7EB" onClick={onClose} />
         <Btn
           label={!address ? (t.nav.arena === '广场' ? '🔗 连接钱包后参与' : '🔗 Connect Wallet') : isWrongNetwork ? (t.nav.arena === '广场' ? '⚠️ 切换网络' : '⚠️ Switch Network') : acceptSuccess ? (t.nav.arena === '广场' ? '✓ 已接受!' : '✓ Accepted!') : acceptConfirming ? (t.nav.arena === '广场' ? '确认中...' : 'Confirming...') : acceptPending ? (t.nav.arena === '广场' ? '等待签名...' : 'Signing...') : (t.nav.arena === '广场' ? '⚔️ 接受挑战' : '⚔️ Accept Challenge')}
           color={isWrongNetwork ? '#D97706' : '#fff'} bg={isWrongNetwork ? '#FFF7ED' : '#7C3AED'} border={isWrongNetwork ? '#FDE68A' : '#7C3AED'}
@@ -1475,7 +1475,7 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel }: { duel: Duel; t: typ
         </div>
       )}
       <div style={S.foot}>
-        <Btn label="取消" color="rgba(255,255,255,0.4)" bg="transparent" border="rgba(255,255,255,0.15)" onClick={onClose} />
+        <Btn label={t.nav.arena === '广场' ? '取消' : 'Cancel'} color="rgba(255,255,255,0.4)" bg="transparent" border="rgba(255,255,255,0.15)" onClick={onClose} />
         <Btn
           label={!address && !isMock ? '🔗 连接钱包后参与' : isWrongNetwork && !isMock ? (t.nav.arena === '广场' ? '⚠️ 切换网络' : '⚠️ Switch Network') : isMock ? '🎮 演示模式' : betSuccess ? '✓ 押注成功!' : betConfirming ? '确认中...' : betPending ? '等待签名...' : '🔒 确认押注'}
           color={isWrongNetwork && !isMock ? 'rgba(250,199,117,0.9)' : '#6b9fff'} bg={isWrongNetwork && !isMock ? 'rgba(250,199,117,0.06)' : 'rgba(107,159,255,0.1)'} border={isWrongNetwork && !isMock ? 'rgba(250,199,117,0.4)' : 'rgba(107,159,255,0.4)'}
@@ -2080,7 +2080,8 @@ function AppInner() {
     const isAI = d.vis === 2;
     const isOpen = d.status === DuelStatus.Open;
     const redAmt = parseFloat(fmtEther(d.wager));
-    const token = chainId === 97 ? 'tBNB' : chainId === 5003 ? 'MNT' : 'BNB';
+    const duelChainId = (d as any).chainId ?? chainId;
+    const token = (d as any).chainToken ?? (duelChainId === 97 ? 'tBNB' : duelChainId === 5003 ? 'MNT' : 'BNB');
     // 用链上claimHash从localStorage读原文
     const storedClaim = typeof window !== 'undefined' ? localStorage.getItem('claim_' + d.claimHash) : null;
     const storedRule = typeof window !== 'undefined' ? localStorage.getItem('rule_' + d.ruleHash) : null;
@@ -2101,7 +2102,7 @@ function AppInner() {
       supportRed,
       watchers: 0,
       expires: formatDeadline(d.deadline),
-      network: networkName,
+      network: (d as any).chainName ?? networkName,
       token,
       index: Math.min(index, t.duels.length - 1),
       isAIJudge: isAI,
