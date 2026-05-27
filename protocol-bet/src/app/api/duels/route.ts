@@ -14,7 +14,7 @@ const CHAINS = [
   {
     chainId: 97,
     name: 'BNB Testnet',
-    contract: '0xE731a80668Ad0439a6B55e57f65C1D7885827566',
+    contract: '0xa0A997cF05F7Baf21becEA4130209fD7C7D1A994',
     rpc: 'https://data-seed-prebsc-1-s1.bnbchain.org:8545',
     token: 'tBNB',
     cacheKey: 'duels:bnb97',
