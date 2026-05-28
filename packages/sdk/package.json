@@ -1,0 +1,30 @@
+{
+  "name": "@verdict-protocol/sdk",
+  "version": "0.1.0",
+  "description": "SDK for integrating Verdict Protocol on-chain wager protocol into your dApp",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch"
+  },
+  "keywords": ["verdict-protocol", "web3", "wager", "on-chain", "ai-judge", "mantle", "bnb"],
+  "author": "lant1ng-1216",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "tsup": "^8.0.0",
+    "viem": "^2.0.0"
+  },
+  "peerDependencies": {
+    "viem": ">=2.0.0"
+  }
+}
