@@ -310,6 +310,132 @@ f"""{L["start_intro"]}
         ]]),
         disable_web_page_preview=True)
 
+LLAMA_CHAIN_MAP = {
+    "bsc": "bsc", "eth": "ethereum", "polygon": "polygon",
+    "arbitrum": "arbitrum", "optimism": "optimism", "base": "base",
+    "mantle": "mantle", "avalanche": "avax"
+}
+
+NATIVE_COIN_IDS = {
+    "eth": "coingecko:ethereum",
+    "bnb": "coingecko:binancecoin",
+    "mantle": "coingecko:mantle",
+    "polygon": "coingecko:matic-network",
+    "arbitrum": "coingecko:ethereum",
+    "optimism": "coingecko:ethereum",
+    "base": "coingecko:ethereum",
+    "avalanche": "coingecko:avalanche-2",
+}
+
+async def fetch_usd_price(symbol_or_id: str) -> float:
+    """Fetch USD price for a token symbol via DeFiLlama."""
+    common = {
+        "eth": "coingecko:ethereum", "bnb": "coingecko:binancecoin",
+        "mnt": "coingecko:mantle", "btc": "coingecko:bitcoin",
+        "usdt": "coingecko:tether", "usdc": "coingecko:usd-coin",
+        "matic": "coingecko:matic-network", "avax": "coingecko:avalanche-2",
+        "dai": "coingecko:dai", "weth": "coingecko:ethereum",
+    }
+    coin_id = common.get(symbol_or_id.lower(), f"coingecko:{symbol_or_id.lower()}")
+    try:
+        async with aiohttp.ClientSession(trust_env=False) as s:
+            async with s.get(
+                f"https://coins.llama.fi/prices/current/{coin_id}",
+                timeout=aiohttp.ClientTimeout(total=8)
+            ) as r:
+                if r.status == 200:
+                    d = await r.json()
+                    coins = d.get("coins", {})
+                    if coins:
+                        return list(coins.values())[0].get("price", 0.0)
+    except Exception as e:
+        print(f"fetch_usd_price error: {e}")
+    return 0.0
+
+async def fetch_token_usd_price(contract: str, chain: str) -> float:
+    """Fetch USD price for a token by contract address via DeFiLlama."""
+    llama_chain = LLAMA_CHAIN_MAP.get(CHAINS.get(chain, {}).get("moralis_chain", chain), "ethereum")
+    url = f"https://coins.llama.fi/prices/current/{llama_chain}:{contract}"
+    try:
+        async with aiohttp.ClientSession(trust_env=False) as s:
+            async with s.get(url, timeout=aiohttp.ClientTimeout(total=8)) as r:
+                if r.status == 200:
+                    d = await r.json()
+                    coins = d.get("coins", {})
+                    if coins:
+                        return list(coins.values())[0].get("price", 0.0)
+    except Exception as e:
+        print(f"fetch_token_usd_price error: {e}")
+    return 0.0
+
+def bar(pct: float, width: int = 8) -> str:
+    """Generate a simple text progress bar."""
+    filled = round(pct / 100 * width)
+    return "█" * filled + "░" * (width - filled)
+
+async def build_holdings_display(address: str, chain: str, balance: dict, tokens: list) -> str:
+    """Build USD holdings display with token breakdown bar chart."""
+    ci = CHAINS[chain]
+    symbol = ci["symbol"]
+
+    # Native token USD value
+    native_price = await fetch_usd_price(symbol)
+    try:
+        native_amount = float(balance.get("balance", "0")) / 1e18
+    except:
+        native_amount = 0.0
+    native_usd = native_amount * native_price
+
+    # ERC20 tokens USD values (parallel fetch)
+    token_items = []
+    async def get_token_val(t):
+        try:
+            amt = float(t.get("balance", "0")) / (10 ** int(t.get("decimals", 18)))
+        except:
+            amt = 0.0
+        if amt <= 0:
+            return
+        sym = t.get("symbol", "?")
+        addr = t.get("token_address", "")
+        price = await fetch_token_usd_price(addr, chain) if addr else await fetch_usd_price(sym)
+        usd_val = amt * price
+        if usd_val > 0.01:
+            token_items.append({"symbol": sym, "amount": amt, "usd": usd_val})
+
+    await asyncio.gather(*[get_token_val(t) for t in tokens[:6]])
+    token_items.sort(key=lambda x: x["usd"], reverse=True)
+
+    # Total USD
+    total_usd = native_usd + sum(t["usd"] for t in token_items)
+
+    lines = []
+    if total_usd > 0:
+        lines.append(f"💵 *Total: ${total_usd:,.2f} USD*")
+        lines.append("")
+
+        # Native token row
+        if native_usd > 0.01:
+            pct = native_usd / total_usd * 100
+            lines.append(f"  `{bar(pct)}` {symbol} {pct:.1f}%  ${native_usd:,.2f}")
+
+        # ERC20 rows (top 3)
+        for t in token_items[:3]:
+            pct = t["usd"] / total_usd * 100
+            lines.append(f"  `{bar(pct)}` {t['symbol']} {pct:.1f}%  ${t['usd']:,.2f}")
+
+        # Others
+        others = token_items[3:]
+        if others:
+            other_usd = sum(o["usd"] for o in others)
+            pct = other_usd / total_usd * 100
+            lines.append(f"  `{bar(pct)}` Other {pct:.1f}%  ${other_usd:,.2f}")
+    else:
+        lines.append(f"💰 Holdings: `{native_amount:.4f} {symbol}` _(value unavailable)_")
+
+    return "
+".join(lines)
+
+
 async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     lang = await get_user_lang(user.username if user else None)
@@ -341,14 +467,13 @@ async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try: nb_raw = float(balance.get("balance","0"))/1e18
     except: nb_raw = 0
-    nb = f"{nb_raw:,.4f} {ci['symbol']}"
 
     tx_lines = []
     for tx in transfers[:5]:
         d = "📤 OUT" if tx.get("from_address","").lower()==address.lower() else "📥 IN"
         tx_lines.append(f"  {d} `{fval(tx.get('value','0'))}` · {tago(tx.get('block_timestamp',''))}")
-    token_lines = [f"  • {t.get('symbol','?')}: `{fval(t.get('balance','0'),int(t.get('decimals',18)))}`" for t in tokens[:3]]
 
+    holdings_display = await build_holdings_display(address, chain, balance, tokens)
     vtext, vemoji = verdict_label(nb_raw, len(transfers))
     case_no = case_number(address)
 
@@ -358,14 +483,12 @@ async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🪙 *Defendant:* {saddr(address)}
 🔗 *Network:* {ci['emoji']} {ci['name']}
 ━━━━━━━━━━━━━━━━━━━
-📋 *ON-CHAIN DATA*
-💰 Holdings: `{nb}`
-📊 Transactions analyzed: `{len(transfers)}`
-
-{chr(10).join(tx_lines) if tx_lines else "  " + L["scan_no_tx"]}
+📋 *HOLDINGS*
+{holdings_display}
 ━━━━━━━━━━━━━━━━━━━
-🪙 *TOKEN HOLDINGS*
-{chr(10).join(token_lines) if token_lines else "  " + L["scan_no_tokens"]}
+📊 *TRANSACTIONS*
+Analyzed: `{len(transfers)}`
+{chr(10).join(tx_lines) if tx_lines else "  " + L["scan_no_tx"]}
 ━━━━━━━━━━━━━━━━━━━
 🔨 *VERDICT: {vtext}* {vemoji}
 ━━━━━━━━━━━━━━━━━━━
@@ -596,19 +719,22 @@ Respond in exactly 2 dramatic sentences. Declare the winner."""
     score_bar1 = "█" * (a1['score']//10) + "░" * (10 - a1['score']//10)
     score_bar2 = "█" * (a2['score']//10) + "░" * (10 - a2['score']//10)
 
+    h1_display = await build_holdings_display(addr1, chain, bal1, tok1)
+    h2_display = await build_holdings_display(addr2, chain, bal2, tok2)
+
     report = f"""⚖️ *VERDICT PROTOCOL — REPORT {case_no}*
 {ci['emoji']} *{ci['name']} Wallet Comparison*
 ━━━━━━━━━━━━━━━━━━━
 *🔴 RED CORNER*
   👤 `{addr1[:6]}...{addr1[-4:]}`
-  💰 Balance: `{fmt(a1['balance'])} {symbol}`
+{h1_display}
   📊 Transactions: `{a1['tx_count']}`
   💸 Net Flow: `{'+' if a1['net']>=0 else ''}{fmt(a1['net'])} {symbol}`
   🕐 Last Active: `{a1['last_active']}`
 
 *🔵 BLUE CORNER*
   👤 `{addr2[:6]}...{addr2[-4:]}`
-  💰 Balance: `{fmt(a2['balance'])} {symbol}`
+{h2_display}
   📊 Transactions: `{a2['tx_count']}`
   💸 Net Flow: `{'+' if a2['net']>=0 else ''}{fmt(a2['net'])} {symbol}`
   🕐 Last Active: `{a2['last_active']}`
