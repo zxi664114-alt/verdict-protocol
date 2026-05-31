@@ -31,7 +31,7 @@ CHAIN_ALIASES = {
     "op":"optimism","mnt":"mantle","avax":"avalanche","avl":"avalanche",
 }
 
-AUTO_DETECT_ORDER = ["bnb","eth","base","arbitrum","polygon","mantle","optimism","avalanche"]
+AUTO_DETECT_ORDER = ["eth","bnb","mantle","base","arbitrum","polygon","optimism","avalanche"]
 EVM_RE = re.compile(r"0x[a-fA-F0-9]{40}")
 KV_URL   = os.getenv("KV_REST_API_URL", "")
 KV_TOKEN = os.getenv("KV_REST_API_TOKEN", "")
@@ -393,10 +393,14 @@ async def watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not EVM_RE.match(address):
         await update.message.reply_text(L["watch_invalid"]); return
     label = args[1] if len(args)>1 else address[:8]+"..."
-    chain = "bnb"
+    chain = None
     if len(args)>2:
         raw = args[2].lower()
-        chain = CHAIN_ALIASES.get(raw, raw) if raw in CHAIN_ALIASES or raw in CHAINS else "bnb"
+        resolved = CHAIN_ALIASES.get(raw, raw)
+        if resolved in CHAINS:
+            chain = resolved
+    if not chain:
+        chain = await auto_detect_chain(address)
     ci = CHAINS[chain]
     chat_id = update.effective_chat.id
     if chat_id not in watchlist: watchlist[chat_id] = []
@@ -515,17 +519,24 @@ async def compare_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(L["compare_invalid"], parse_mode="Markdown")
         return
 
-    chain = "bnb"
+    chain = None
     if len(args) > 2:
         raw = args[2].lower()
-        chain = CHAIN_ALIASES.get(raw, raw) if raw in CHAIN_ALIASES or raw in CHAINS else "bnb"
+        resolved = CHAIN_ALIASES.get(raw, raw)
+        if resolved in CHAINS:
+            chain = resolved
 
-    ci = CHAINS[chain]
+    ci_name = CHAINS.get(chain, {}).get("name", L["scan_detecting"]) if chain else L["scan_detecting"]
     case_no = case_number(addr1 + addr2)
 
     wait = await update.message.reply_text(
-        L["compare_session"].format(emoji=ci["emoji"], chain=ci["name"]),
+        L["compare_session"].format(emoji=CHAINS.get(chain, CHAINS["eth"])["emoji"] if chain else "🔍", chain=ci_name),
         parse_mode="Markdown")
+
+    if not chain:
+        chain = await auto_detect_chain(addr1)
+
+    ci = CHAINS[chain]
 
     txs1, bal1, tok1, txs2, bal2, tok2 = await asyncio.gather(
         get_transfers(addr1, chain, 20), get_balance(addr1, chain), get_tokens(addr1, chain),
