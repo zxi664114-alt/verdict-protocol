@@ -64,7 +64,7 @@ async def kv_get(key: str) -> str:
 T = {
     "en": {
         "start_intro": "⚖️ *VERDICT PROTOCOL — Verdict Protocol*\n_The On-Chain Tribunal. Every wallet gets judged._",
-        "start_commands": "*Commands:*\n⚖️ `/scan` `/judge` `<address> [chain]` — Analyze wallet on-chain\n🐋 `/whale` `/wallet` `[chain]` — View whale wallets\n🟢 `/mantle` — Mantle ecosystem live data\n💰 `/price` `<token or address>` — Token price & 24h change\n⚔️ `/compare` `<addr1> <addr2> [chain]` — Compare two wallets, get AI ruling\n👁 `/watch` `/subpoena` `<address> [label]` — Issue surveillance order\n📋 `/watchlist` `/docket` — View active cases\n❌ `/unwatch` `<address>` — Dismiss case\n🌐 `/lang en` or `/lang zh` — Switch language",
+        "start_commands": "*Commands:*\n⚖️ `/scan` `/judge` `<address> [chain]` — Analyze wallet on-chain\n🐋 `/whale` `/wallet` `[chain]` — View whale wallets\n🟢 `/mantle` — Mantle ecosystem live data\n💰 `/price` `<token or address>` — Token price & 24h change\n⚔️ `/compare` `<addr1> <addr2> [chain]` — Compare two wallets, get AI ruling\n👁 `/watch` `/subpoena` `<address> [label]` — Issue surveillance order\n📋 `/watchlist` `/docket` — View active cases\n❌ `/unwatch` `<address>` — Dismiss case\n🚨 `/alert on/off/status` — Mantle ecosystem alerts\n🌐 `/lang en` or `/lang zh` — Switch language",
         "supported_chains": "Supported Chains",
         "chains_note": "Or paste any wallet address directly — protocol is always live",
         "lang_set": "✅ Language set to English",
@@ -107,7 +107,7 @@ T = {
     },
     "zh": {
         "start_intro": "⚖️ *VERDICT PROTOCOL — Verdict Protocol*\n_链上裁判所。每个钱包都将被审判。_",
-        "start_commands": "*命令列表：*\n⚖️ `/scan` `/judge` `<地址> [链]` — 分析链上钱包\n🐋 `/whale` `/wallet` `[链]` — 查看巨鲸钱包\n🟢 `/mantle` — Mantle 生态实时数据\n💰 `/price` `<代币或地址>` — 代币价格与24h涨跌\n⚔️ `/compare` `<地址1> <地址2> [链]` — 对比两个钱包，获取 AI 裁决\n👁 `/watch` `/subpoena` `<地址> [标签]` — 发出监控令\n📋 `/watchlist` `/docket` — 查看活跃监控\n❌ `/unwatch` `<地址>` — 撤销案件\n🌐 `/lang en` 或 `/lang zh` — 切换语言",
+        "start_commands": "*命令列表：*\n⚖️ `/scan` `/judge` `<地址> [链]` — 分析链上钱包\n🐋 `/whale` `/wallet` `[链]` — 查看巨鲸钱包\n🟢 `/mantle` — Mantle 生态实时数据\n💰 `/price` `<代币或地址>` — 代币价格与24h涨跌\n⚔️ `/compare` `<地址1> <地址2> [链]` — 对比两个钱包，获取 AI 裁决\n👁 `/watch` `/subpoena` `<地址> [标签]` — 发出监控令\n📋 `/watchlist` `/docket` — 查看活跃监控\n❌ `/unwatch` `<地址>` — 撤销案件\n🚨 `/alert on/off/status` — Mantle 生态异动推送\n🌐 `/lang en` 或 `/lang zh` — 切换语言",
         "supported_chains": "支持的链",
         "chains_note": "或直接粘贴钱包地址 — 协议随时运行",
         "lang_set": "✅ 语言已切换为中文",
@@ -280,11 +280,114 @@ Be dramatic but factual. Use phrases like "The court finds...", "This defendant.
     return "The protocol is offline. Judgment deferred pending further evidence."
 
 def verdict_label(balance_eth: float, tx_count: int) -> tuple:
+    # Legacy function kept for compatibility
     if balance_eth > 10000: return ("GUILTY — MEGA WHALE", "🔴")
     if balance_eth > 1000:  return ("GUILTY — WHALE ACTIVITY", "🟠")
     if balance_eth > 100:   return ("PERSON OF INTEREST", "🟡")
     if tx_count == 0:       return ("REPORT DISMISSED — NO EVIDENCE", "⚪")
     return ("INNOCENT — ORDINARY CITIZEN", "🟢")
+
+def risk_score(address: str, transfers: list, balance: dict, tokens: list, total_usd: float = 0) -> dict:
+    """Calculate structured risk score for a wallet (0-100, higher = riskier)."""
+    score = 0
+    flags = []
+
+    try: native_eth = float(balance.get("balance", "0")) / 1e18
+    except: native_eth = 0.0
+
+    tx_count = len(transfers)
+    out_txs = [t for t in transfers if t.get("from_address", "").lower() == address.lower()]
+    in_txs  = [t for t in transfers if t.get("to_address",   "").lower() == address.lower()]
+
+    # ── Low balance ──
+    if total_usd < 1.0 and tx_count > 0:
+        score += 15
+        flags.append("Minimal holdings — dust wallet or recently drained")
+
+    # ── One-way flow: all IN, no OUT ──
+    if tx_count >= 3 and len(out_txs) == 0:
+        score += 15
+        flags.append("All inbound — no outgoing transactions detected")
+
+    # ── Sudden large outflow ──
+    if out_txs:
+        try:
+            max_out = max(float(t.get("value", "0")) / 1e18 for t in out_txs)
+            if max_out > 10 and max_out > native_eth * 5:
+                score += 20
+                flags.append(f"Large outflow detected ({max_out:.2f} native tokens)")
+        except: pass
+
+    # ── Single token concentration ──
+    if len(tokens) <= 1 and total_usd > 100:
+        score += 10
+        flags.append("High concentration — single asset dominates portfolio")
+
+    # ── Dormant wallet ──
+    if transfers:
+        try:
+            from datetime import datetime, timezone
+            last_ts = transfers[0].get("block_timestamp", "")
+            if last_ts:
+                dt = datetime.fromisoformat(last_ts.replace("Z", "+00:00"))
+                days_inactive = (datetime.now(timezone.utc) - dt).days
+                if days_inactive > 180:
+                    score += 10
+                    flags.append(f"Dormant — last activity {days_inactive}d ago")
+        except: pass
+
+    # ── Positive signals (reduce score) ──
+    if total_usd > 1_000_000:
+        score = max(0, score - 15)
+        flags.append("Large institutional balance — risk reduced")
+    if tx_count > 50:
+        score = max(0, score - 10)
+
+    # ── No activity at all ──
+    if tx_count == 0:
+        score = 5
+        flags = ["No on-chain activity found"]
+
+    score = max(0, min(100, score))
+
+    if score <= 30:
+        level = "ACQUITTED"
+        emoji = "⚖️"
+        desc  = "No evidence of wrongdoing"
+    elif score <= 60:
+        level = "UNDER REVIEW"
+        emoji = "🔍"
+        desc  = "Patterns worth monitoring"
+    elif score <= 80:
+        level = "SUSPICIOUS"
+        emoji = "⚠️"
+        desc  = "Multiple red flags detected"
+    else:
+        level = "CONDEMNED"
+        emoji = "🔨"
+        desc  = "Extreme risk signals"
+
+    return {
+        "score": score,
+        "level": level,
+        "emoji": emoji,
+        "desc": desc,
+        "flags": flags,
+    }
+
+def format_risk_block(risk: dict) -> str:
+    """Format risk score into a Telegram-ready string."""
+    bar_filled = "█" * (risk["score"] // 10)
+    bar_empty  = "░" * (10 - risk["score"] // 10)
+    lines = [
+        f"{risk['emoji']} *{risk['level']}* — {risk['score']}/100",
+        f"`{bar_filled}{bar_empty}`  {risk['desc']}",
+    ]
+    if risk["flags"]:
+        lines.append("")
+        for f in risk["flags"]:
+            lines.append(f"  • {f}")
+    return "\n".join(lines)
 
 # ── Commands ──────────────────────────────────────────────
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -473,7 +576,16 @@ async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tx_lines.append(f"  {d} `{fval(tx.get('value','0'))}` · {tago(tx.get('block_timestamp',''))}")
 
     holdings_display = await build_holdings_display(address, chain, balance, tokens)
-    vtext, vemoji = verdict_label(nb_raw, len(transfers))
+
+    # Extract total_usd from holdings for risk scoring
+    try:
+        native_price = await fetch_usd_price(ci["symbol"])
+        total_usd_val = nb_raw * native_price
+    except:
+        total_usd_val = 0.0
+
+    risk = risk_score(address, transfers, balance, tokens, total_usd_val)
+    risk_block = format_risk_block(risk)
     case_no = case_number(address)
 
     report = f"""⚖️ *VERDICT PROTOCOL — REPORT {case_no}*
@@ -489,7 +601,8 @@ async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 Analyzed: `{len(transfers)}`
 {chr(10).join(tx_lines) if tx_lines else "  " + L["scan_no_tx"]}
 ━━━━━━━━━━━━━━━━━━━
-🔨 *VERDICT: {vtext}* {vemoji}
+🔎 *RISK ASSESSMENT*
+{risk_block}
 ━━━━━━━━━━━━━━━━━━━
 👨‍⚖️ *AI Verdict:*
 _{ruling}_
@@ -1033,6 +1146,157 @@ async def monitor_wallets(app):
                 except Exception as e:
                     print(f"Monitor err: {e}")
 
+# ── Mantle Alert System ───────────────────────────────────
+alert_subscribers: dict = {}  # chat_id -> {"tvl": float, "price": float, "active": bool}
+
+ALERT_TVL_THRESHOLD   = 5.0   # % change
+ALERT_PRICE_THRESHOLD = 8.0   # % change
+ALERT_INTERVAL        = 1800  # 30 minutes
+
+async def get_mantle_snapshot() -> dict:
+    """Fetch current Mantle TVL and MNT price for comparison."""
+    tvl = 0.0
+    price = 0.0
+    try:
+        async with aiohttp.ClientSession(trust_env=False) as s:
+            async with s.get("https://api.llama.fi/v2/chains",
+                             timeout=aiohttp.ClientTimeout(total=10)) as r:
+                if r.status == 200:
+                    chains = await r.json()
+                    for c in chains:
+                        if c.get("name", "").lower() == "mantle":
+                            tvl = float(c.get("tvl", 0))
+                            break
+    except Exception as e:
+        print(f"[Alert] TVL fetch error: {e}")
+    try:
+        price = await fetch_usd_price("mnt")
+    except Exception as e:
+        print(f"[Alert] Price fetch error: {e}")
+    return {"tvl": tvl, "price": price}
+
+async def mantle_alert_loop(app):
+    """Background task: check Mantle metrics every 30 min and push alerts."""
+    await asyncio.sleep(60)  # initial delay
+    baseline = await get_mantle_snapshot()
+    print(f"[Alert] Baseline — TVL: ${baseline['tvl']:,.0f} | MNT: ${baseline['price']:.4f}")
+
+    while True:
+        await asyncio.sleep(ALERT_INTERVAL)
+        if not alert_subscribers:
+            continue
+        try:
+            current = await get_mantle_snapshot()
+            alerts = []
+
+            # TVL change check
+            if baseline["tvl"] > 0:
+                tvl_change = (current["tvl"] - baseline["tvl"]) / baseline["tvl"] * 100
+                if abs(tvl_change) >= ALERT_TVL_THRESHOLD:
+                    direction = "📈 surged" if tvl_change > 0 else "📉 dropped"
+                    alerts.append(
+                        f"🏦 *Mantle TVL {direction} {abs(tvl_change):.1f}%*\n"
+                        f"  Previous: ${baseline['tvl']/1e6:.2f}M\n"
+                        f"  Current:  ${current['tvl']/1e6:.2f}M"
+                    )
+
+            # MNT price change check
+            if baseline["price"] > 0:
+                price_change = (current["price"] - baseline["price"]) / baseline["price"] * 100
+                if abs(price_change) >= ALERT_PRICE_THRESHOLD:
+                    direction = "📈 pumped" if price_change > 0 else "📉 dumped"
+                    alerts.append(
+                        f"💰 *MNT {direction} {abs(price_change):.1f}%*\n"
+                        f"  Previous: ${baseline['price']:.4f}\n"
+                        f"  Current:  ${current['price']:.4f}"
+                    )
+
+            if alerts:
+                msg = (
+                    "🚨 *MANTLE ECOSYSTEM ALERT*\n"
+                    "━━━━━━━━━━━━━━━━━━━\n" +
+                    "\n\n".join(alerts) +
+                    "\n━━━━━━━━━━━━━━━━━━━\n"
+                    "_Verdict Protocol — Protocol is always live_ ⚖️"
+                )
+                dead = []
+                for chat_id, sub in alert_subscribers.items():
+                    if not sub.get("active", True):
+                        continue
+                    try:
+                        await app.bot.send_message(
+                            chat_id=chat_id,
+                            text=msg,
+                            parse_mode="Markdown",
+                            disable_web_page_preview=True
+                        )
+                    except Exception as e:
+                        print(f"[Alert] Send failed for {chat_id}: {e}")
+                        dead.append(chat_id)
+                for d in dead:
+                    alert_subscribers.pop(d, None)
+                # Update baseline after alert
+                baseline = current
+            else:
+                # Gradually update baseline even without alerts
+                baseline = current
+
+        except Exception as e:
+            print(f"[Alert] Loop error: {e}")
+
+async def alert_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    lang = await get_user_lang(user.username if user else None)
+    chat_id = update.effective_chat.id
+    args = context.args or []
+    sub_key = args[0].lower() if args else ""
+
+    if sub_key == "on":
+        alert_subscribers[chat_id] = {"active": True}
+        await update.message.reply_text(
+            "🔔 *Mantle Alert Activated*\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "You will be notified when:\n"
+            "  • Mantle TVL changes ≥ 5%\n"
+            "  • MNT price changes ≥ 8% in 30 min\n\n"
+            "Use `/alert off` to unsubscribe.\n"
+            "_Protocol is watching. ⚖️_",
+            parse_mode="Markdown"
+        )
+    elif sub_key == "off":
+        if chat_id in alert_subscribers:
+            alert_subscribers[chat_id]["active"] = False
+        await update.message.reply_text(
+            "🔕 *Mantle Alert Deactivated*\n"
+            "You will no longer receive Mantle alerts.\n"
+            "Use `/alert on` to reactivate.",
+            parse_mode="Markdown"
+        )
+    elif sub_key == "status":
+        sub = alert_subscribers.get(chat_id)
+        if sub and sub.get("active"):
+            status = "🔔 *Active* — alerts are enabled"
+        else:
+            status = "🔕 *Inactive* — alerts are disabled"
+        await update.message.reply_text(
+            f"📋 *Alert Status*\n━━━━━━━━━━━━━━━━━━━\n{status}\n\n"
+            f"Thresholds:\n"
+            f"  • TVL change ≥ {ALERT_TVL_THRESHOLD}%\n"
+            f"  • MNT price change ≥ {ALERT_PRICE_THRESHOLD}%\n"
+            f"  • Check interval: every 30 min",
+            parse_mode="Markdown"
+        )
+    else:
+        await update.message.reply_text(
+            "⚖️ *Mantle Alert*\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "`/alert on`     — Subscribe to Mantle alerts\n"
+            "`/alert off`    — Unsubscribe\n"
+            "`/alert status` — Check current status",
+            parse_mode="Markdown"
+        )
+
+
 def main():
     if not TELEGRAM_TOKEN:
         print("❌ TELEGRAM_TOKEN not set"); return
@@ -1054,7 +1318,11 @@ def main():
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    async def post_init(a): asyncio.create_task(monitor_wallets(a))
+    app.add_handler(CommandHandler("alert", alert_command))
+
+    async def post_init(a):
+        asyncio.create_task(monitor_wallets(a))
+        asyncio.create_task(mantle_alert_loop(a))
     app.post_init = post_init
     print("✅ Protocol is live. Ctrl+C to adjourn.")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
