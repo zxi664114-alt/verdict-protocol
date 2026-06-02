@@ -659,25 +659,22 @@ function ChainSelector({ selectedChain, onSelect, placeholder }: { selectedChain
 
 function IssueModal({ t, onClose, chainId = 97 }: { t: typeof LANG['en']; onClose: () => void; chainId?: number }) {
   const m = t.modal;
-  const isZh = t.nav.arena === '广场';
-
-  // Form state
   const [claim, setClaim] = useState('');
   const [rule, setRule] = useState('');
   const [stake, setStake] = useState('');
-  const [duration, setDuration] = useState('30');
-  const [durationUnit, setDurationUnit] = useState(0);
-  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
-  const [audienceRatio] = useState(0);
+  const [duration, setDuration] = useState('7');
+  const [durationUnit, setDurationUnit] = useState(0); // 0=天 1=周 2=月
+  const [visibility, setVisibility] = useState<'public' | 'private' | 'ai'>('public');
+  const [audienceRatio, setAudienceRatio] = useState(0);
+  const [submitted, setSubmitted] = useState(false);
   const [tgUsername, setTgUsername] = useState('');
-
-  // Step: 'form' | 'scanning' | 'report' | 'signing'
-  const [step, setStep] = useState<'form' | 'scanning' | 'report' | 'signing'>('form');
-  const [auditResult, setAuditResult] = useState<any>(null);
 
   const currentToken = chainId === 97 ? 'tBNB' : chainId === 5003 ? 'MNT' : chainId === 56 ? 'BNB' : 'ETH';
   const currentNetwork = chainId === 97 ? 'BNB Testnet' : chainId === 5003 ? 'Mantle Sepolia' : chainId === 56 ? 'BNB Chain' : 'Ethereum';
+  const winnerPct = 100 - audienceRatio;
   const presetDays = [7, 14, 30, 90];
+  const unitLabels = m.durationUnits;
+  const presetLabels = m.durationPresets;
 
   const { create, isPending, isConfirming, isSuccess, error } = useCreate();
 
@@ -685,37 +682,16 @@ function IssueModal({ t, onClose, chainId = 97 }: { t: typeof LANG['en']; onClos
     if (isSuccess) { setTimeout(onClose, 1500); }
   }, [isSuccess, onClose]);
 
-  const canReview = claim.trim() && rule.trim() && parseFloat(stake) > 0;
+  const canSubmit = claim.trim() && rule.trim() && parseFloat(stake) > 0 && !isPending && !isConfirming;
 
-  // Call /api/audit then show report
-  const handleReview = async () => {
-    if (!canReview) return;
-    setStep('scanning');
-    try {
-      const res = await fetch('/api/audit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          claimText: claim.trim(),
-          ruleText: rule.trim(),
-          lang: isZh ? 'zh' : 'en',
-        }),
-      });
-      const data = await res.json();
-      setAuditResult(data.error ? null : data);
-    } catch {
-      setAuditResult(null);
-    }
-    setStep('report');
-  };
-
-  // Proceed to sign after reviewing
-  const handleProceed = () => {
+  const handleSubmit = () => {
+    if (!canSubmit) return;
     const multipliers = [1, 7, 30];
     const durationSecs = parseInt(duration) * multipliers[durationUnit] * 86400;
-    const visNum = visibility === 'public' ? 0 : 1;
+    const visNum = visibility === 'public' ? 0 : visibility === 'private' ? 1 : 2;
     const claimTrimmed = claim.trim();
     const ruleTrimmed = rule.trim();
+    // 存到localStorage（本地快速读取）+ API（跨设备读取）
     if (typeof window !== 'undefined') {
       try {
         const { keccak256, toBytes } = require('viem');
@@ -723,380 +699,189 @@ function IssueModal({ t, onClose, chainId = 97 }: { t: typeof LANG['en']; onClos
         const rHash = keccak256(toBytes(ruleTrimmed));
         localStorage.setItem('claim_' + cHash, claimTrimmed);
         localStorage.setItem('rule_' + rHash, ruleTrimmed);
+        // 存到服务端（声明文字 + TG 用户名一次提交）
         const tgClean = tgUsername.trim() ? tgUsername.trim().replace(/^@/, '').toLowerCase() : undefined;
         fetch('/api/claim', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ claimHash: cHash, ruleHash: rHash, claimText: claimTrimmed, ruleText: ruleTrimmed, tgUsername: tgClean }),
         }).catch(() => {});
-        // Cache audit result
-        if (auditResult) {
-          fetch('/api/audit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ claimText: claimTrimmed, ruleText: ruleTrimmed, lang: isZh ? 'zh' : 'en', claimHash: cHash }),
-          }).catch(() => {});
-        }
       } catch (e) {}
     }
     create({ claim: claimTrimmed, rule: ruleTrimmed, durationSecs, wagerEth: stake, audioBps: audienceRatio * 100, vis: visNum });
-    setStep('signing');
   };
 
-  const RISK_COLOR: Record<string, string> = { high: '#E24B4A', mid: '#EF9F27', low: '#639922' };
-  const RISK_BG: Record<string, string> = { high: '#FCEBEB', mid: '#FAEEDA', low: '#EAF3DE' };
-  const RISK_TEXT: Record<string, string> = { high: '#A32D2D', mid: '#854F0B', low: '#3B6D11' };
-  const RISK_LABEL_EN: Record<string, string> = { high: 'High', mid: 'Medium', low: 'Low' };
-  const RISK_LABEL_ZH: Record<string, string> = { high: '高风险', mid: '中风险', low: '低风险' };
+  const btnLabel = isSuccess ? '✓ 发起成功!' : isConfirming ? '链上确认中...' : isPending ? '等待签名...' : visibility === 'ai' ? m.submitAI : m.submit;
 
-  const btnLabel = isSuccess ? (isZh ? '✓ 发起成功!' : '✓ Created!') :
-    isConfirming ? (isZh ? '链上确认中...' : 'Confirming...') :
-    isPending ? (isZh ? '等待签名...' : 'Signing...') :
-    (isZh ? '签名并上链 →' : 'Sign & submit →');
-
-  const caseNo = `#${Math.floor(Math.random() * 90000 + 10000)}`;
-
-  // ── Shared styles ──
-  const S = {
-    wrap: { position: 'fixed' as const, inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' },
-    modal: { background: '#fff', border: '0.5px solid #E5E7EB', borderRadius: '16px', width: '100%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 40px rgba(0,0,0,0.12)' },
-    header: { padding: '18px 24px 14px', borderBottom: '0.5px solid #E5E7EB', textAlign: 'center' as const },
-    body: { padding: '20px 24px', display: 'flex', flexDirection: 'column' as const, gap: '16px', maxHeight: '65vh', overflowY: 'auto' as const },
-    footer: { padding: '14px 24px', borderTop: '0.5px solid #E5E7EB', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' },
-    clause: { display: 'flex', gap: '10px', alignItems: 'flex-start' as const },
-    clauseNum: { fontSize: '10px', fontWeight: 500, color: '#9CA3AF', fontFamily: 'monospace', minWidth: '24px', paddingTop: '10px', letterSpacing: '0.04em' },
-    clauseContent: { flex: 1 },
-    label: { fontSize: '10px', fontWeight: 500, color: '#6B7280', textTransform: 'uppercase' as const, letterSpacing: '0.07em', marginBottom: '6px' },
-    input: { width: '100%', background: '#F9FAFB', border: '0.5px solid #D1D5DB', borderRadius: '10px', padding: '9px 12px', fontSize: '13px', color: '#111827', outline: 'none', boxSizing: 'border-box' as const },
-    textarea: { width: '100%', background: '#F9FAFB', border: '0.5px solid #D1D5DB', borderRadius: '10px', padding: '9px 12px', fontSize: '13px', color: '#111827', outline: 'none', resize: 'none' as const, boxSizing: 'border-box' as const, lineHeight: '1.6' },
-    btnCancel: { padding: '10px', borderRadius: '10px', fontSize: '13px', color: '#6B7280', border: '0.5px solid #D1D5DB', background: 'transparent', cursor: 'pointer' },
-    btnPrimary: { padding: '10px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, color: '#fff', border: 'none', background: '#111827', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' },
-  };
-
-  // ── STEP: FORM ──
-  if (step === 'form') return (
-    <div style={S.wrap} onClick={onClose}>
-      <div style={S.modal} onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div style={S.header}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '50%', border: '0.5px solid #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px', fontSize: '18px' }}>⚖️</div>
-          <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' }}>
-            {isZh ? '链上对赌协议' : 'On-Chain Wager Agreement'}
-          </div>
-          <div style={{ fontSize: '11px', color: '#9CA3AF' }}>Verdict Protocol · {currentNetwork}</div>
-          <div style={{ fontSize: '10px', color: '#D1D5DB', marginTop: '4px', fontFamily: 'monospace' }}>CASE #—————  |  Draft</div>
-        </div>
-
-        {/* Body */}
-        <div style={S.body}>
-          {/* §1 Claim */}
-          <div style={S.clause}>
-            <div style={S.clauseNum}>§ 1</div>
-            <div style={S.clauseContent}>
-              <div style={S.label}>{isZh ? '声明 — 发起方主张' : 'Claim — The claimant asserts that'}</div>
-              <textarea style={S.textarea} rows={3} value={claim} onChange={e => setClaim(e.target.value)}
-                placeholder={isZh ? '例：BTC 将在 2026 年 12 月 31 日前突破 15 万美元（以 CoinGecko 收盘价为准）' : 'e.g. BTC will exceed $150,000 by Dec 31, 2026, as measured by CoinGecko closing price.'} />
-            </div>
-          </div>
-
-          {/* §2 Ruling standard */}
-          <div style={S.clause}>
-            <div style={S.clauseNum}>§ 2</div>
-            <div style={S.clauseContent}>
-              <div style={S.label}>{isZh ? '裁定标准 — 结果以此为准' : 'Ruling standard — The verdict shall be determined by'}</div>
-              <textarea style={S.textarea} rows={2} value={rule} onChange={e => setRule(e.target.value)}
-                placeholder={isZh ? '例：以截止日 CoinGecko 日收盘价为准，链上数据优先。' : 'e.g. CoinGecko daily closing price on deadline. On-chain data takes precedence.'} />
-            </div>
-          </div>
-
-          {/* §3 Stakes */}
-          <div style={S.clause}>
-            <div style={S.clauseNum}>§ 3</div>
-            <div style={S.clauseContent}>
-              <div style={S.label}>{isZh ? '押注金额' : 'Stakes'}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px' }}>
-                <input style={S.input} type="number" min="0" step="0.001" value={stake} onChange={e => setStake(e.target.value)} placeholder="0.00" />
-                <div style={{ background: '#F3F4F6', border: '0.5px solid #E5E7EB', borderRadius: '10px', padding: '9px 14px', fontSize: '13px', fontWeight: 600, color: '#374151' }}>{currentToken}</div>
-              </div>
-            </div>
-          </div>
-
-          {/* §4 Duration */}
-          <div style={S.clause}>
-            <div style={S.clauseNum}>§ 4</div>
-            <div style={S.clauseContent}>
-              <div style={S.label}>{isZh ? '有效期' : 'Duration'}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-                <input style={S.input} type="number" min="1" value={duration} onChange={e => setDuration(e.target.value)} />
-                <select style={S.input} value={durationUnit} onChange={e => setDurationUnit(Number(e.target.value))}>
-                  <option value={0}>{isZh ? '天' : 'Days'}</option>
-                  <option value={1}>{isZh ? '周' : 'Weeks'}</option>
-                  <option value={2}>{isZh ? '月' : 'Months'}</option>
-                </select>
-              </div>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                {presetDays.map(d => (
-                  <button key={d} onClick={() => { setDuration(String(d)); setDurationUnit(0); }}
-                    style={{ flex: 1, padding: '6px', borderRadius: '8px', fontSize: '11px', fontWeight: 500, cursor: 'pointer',
-                      border: duration === String(d) && durationUnit === 0 ? '1px solid #111827' : '0.5px solid #E5E7EB',
-                      background: duration === String(d) && durationUnit === 0 ? '#111827' : '#F9FAFB',
-                      color: duration === String(d) && durationUnit === 0 ? '#fff' : '#6B7280' }}>
-                    {d}{isZh ? '天' : 'd'}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* §5 Audience pool */}
-          <div style={S.clause}>
-            <div style={S.clauseNum}>§ 5</div>
-            <div style={S.clauseContent}>
-              <div style={S.label}>
-                {isZh ? '观众池分配' : 'Audience pool allocation'}
-                <span style={{ fontSize: '9px', color: '#D1D5DB', fontStyle: 'italic', textTransform: 'none', letterSpacing: 0, marginLeft: '6px' }}>
-                  {isZh ? '开发中' : 'in development'}
-                </span>
-              </div>
-              <div style={{ background: '#F9FAFB', border: '0.5px solid #E5E7EB', borderRadius: '10px', padding: '12px', opacity: 0.6 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <div style={{ textAlign: 'center', padding: '8px', background: '#fff', border: '0.5px solid #E5E7EB', borderRadius: '8px' }}>
-                    <div style={{ fontSize: '9px', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '3px' }}>{isZh ? '赢家获得' : 'Winner gets'}</div>
-                    <div style={{ fontSize: '16px', fontWeight: 600, color: '#374151' }}>100%</div>
-                  </div>
-                  <div style={{ textAlign: 'center', padding: '8px', background: '#fff', border: '0.5px solid #E5E7EB', borderRadius: '8px' }}>
-                    <div style={{ fontSize: '9px', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '3px' }}>{isZh ? '观众池' : 'Audience'}</div>
-                    <div style={{ fontSize: '16px', fontWeight: 600, color: '#374151' }}>0%</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* §6 Visibility */}
-          <div style={S.clause}>
-            <div style={S.clauseNum}>§ 6</div>
-            <div style={S.clauseContent}>
-              <div style={S.label}>{isZh ? '可见性' : 'Visibility'}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                {[
-                  { key: 'public' as const, name: isZh ? '公开' : 'Public', desc: isZh ? '在广场展示，任何人可接受挑战' : 'Listed in Arena. Any wallet may accept.' },
-                  { key: 'private' as const, name: isZh ? '私密' : 'Private', desc: isZh ? '仅通过链接访问，分享给指定对手' : 'Accessible via link only. Share with your challenger.' },
-                ].map(opt => (
-                  <div key={opt.key} onClick={() => setVisibility(opt.key)}
-                    style={{ border: visibility === opt.key ? '1px solid #374151' : '0.5px solid #E5E7EB', borderRadius: '10px', padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: '10px', background: visibility === opt.key ? '#F9FAFB' : '#fff' }}>
-                    <div style={{ width: '14px', height: '14px', borderRadius: '50%', border: visibility === opt.key ? '2px solid #111827' : '1.5px solid #D1D5DB', background: visibility === opt.key ? '#111827' : 'transparent', flexShrink: 0, marginTop: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {visibility === opt.key && <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#fff' }} />}
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '13px', fontWeight: 500, color: '#111827', marginBottom: '2px' }}>{opt.name}</div>
-                      <div style={{ fontSize: '11px', color: '#6B7280' }}>{opt.desc}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* §7 TG */}
-          <div style={S.clause}>
-            <div style={S.clauseNum}>§ 7</div>
-            <div style={S.clauseContent}>
-              <div style={S.label}>{isZh ? 'Telegram 通知' : 'Telegram notification'}</div>
-              <input style={S.input} type="text" value={tgUsername} onChange={e => setTgUsername(e.target.value)} placeholder="@your_telegram_username" />
-              <div style={{ fontSize: '10px', color: '#9CA3AF', marginTop: '4px' }}>
-                {isZh ? '先给 @VerdictProtocol_Bot 发 /start 才能收到通知' : 'Send /start to @VerdictProtocol_Bot first to activate notifications.'}
-              </div>
-            </div>
-          </div>
-
-          {/* §8 Signatures */}
-          <div style={{ borderTop: '0.5px dashed #E5E7EB', paddingTop: '16px' }}>
-            <div style={S.clause}>
-              <div style={S.clauseNum}>§ 8</div>
-              <div style={S.clauseContent}>
-                <div style={S.label}>{isZh ? '签名' : 'Signatures'}</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <div style={{ border: '0.5px solid #E5E7EB', borderRadius: '10px', padding: '10px 12px', minHeight: '52px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-                    <div style={{ fontSize: '9px', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '3px' }}>{isZh ? '发起方 (红方)' : 'Claimant (Red)'}</div>
-                    <div style={{ fontSize: '12px', color: '#6B7280', fontStyle: 'italic' }}>{isZh ? '已连接钱包' : 'Connected wallet'}</div>
-                  </div>
-                  <div style={{ border: '0.5px dashed #E5E7EB', borderRadius: '10px', padding: '10px 12px', minHeight: '52px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-                    <div style={{ fontSize: '9px', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '3px' }}>{isZh ? '挑战方 (蓝方)' : 'Challenger (Blue)'}</div>
-                    <div style={{ fontSize: '12px', color: '#D1D5DB', fontStyle: 'italic' }}>{isZh ? '等待接受' : 'Awaiting acceptance'}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div style={S.footer}>
-          <button style={S.btnCancel} onClick={onClose}>{isZh ? '取消' : 'Cancel'}</button>
-          <button style={{ ...S.btnPrimary, opacity: canReview ? 1 : 0.45, cursor: canReview ? 'pointer' : 'not-allowed' }}
-            onClick={handleReview} disabled={!canReview}>
-            <span>🛡</span>
-            {isZh ? 'ContractAI 审查' : 'Review with ContractAI'}
-            <span style={{ fontSize: '10px', padding: '1px 7px', borderRadius: '4px', background: 'rgba(255,255,255,0.2)', fontWeight: 500 }}>AI</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  // ── STEP: SCANNING ──
-  if (step === 'scanning') return (
-    <div style={S.wrap}>
-      <div style={{ ...S.modal, maxWidth: '360px' }}>
-        <div style={{ padding: '40px 32px', textAlign: 'center' }}>
-          <div style={{ fontSize: '32px', marginBottom: '16px', animation: 'spin 1.5s linear infinite', display: 'inline-block' }}>⚖️</div>
-          <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
-            {isZh ? 'ContractAI 审查中...' : 'ContractAI analyzing...'}
-          </div>
-          <div style={{ fontSize: '12px', color: '#9CA3AF' }}>
-            {isZh ? '正在扫描潜在风险条款' : 'Scanning for potential risk clauses'}
-          </div>
-        </div>
-      </div>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-    </div>
-  );
-
-  // ── STEP: REPORT ──
-  if (step === 'report') {
-    const risks = auditResult?.risks || [];
-    const score = auditResult?.overallScore ?? 0;
-    const summary = auditResult?.summary || '';
-    const highCount = risks.filter((r: any) => r.level === 'high').length;
-    const midCount = risks.filter((r: any) => r.level === 'mid').length;
-    const lowCount = risks.filter((r: any) => r.level === 'low').length;
-    const riskLevel = score <= 30 ? (isZh ? '⚖️ 低风险' : '⚖️ Low risk') :
-      score <= 60 ? (isZh ? '🔍 中等风险' : '🔍 Medium risk') :
-      score <= 80 ? (isZh ? '⚠️ 高风险' : '⚠️ High risk') :
-      (isZh ? '🔨 极高风险' : '🔨 Critical');
-
-    return (
-      <div style={S.wrap} onClick={onClose}>
-        <div style={S.modal} onClick={e => e.stopPropagation()}>
-          {/* Header */}
-          <div style={{ ...S.header, display: 'flex', alignItems: 'center', gap: '10px', textAlign: 'left' as const, padding: '16px 24px' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '50%', border: '0.5px solid #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>⚖️</div>
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>
-                {isZh ? 'ContractAI 风险报告' : 'ContractAI Risk Report'}
-              </div>
-              <div style={{ fontSize: '11px', color: '#9CA3AF' }}>CASE {caseNo} · {isZh ? '对赌协议' : 'Wager Agreement'} · Draft</div>
-            </div>
-          </div>
-
-          {/* Score bar */}
-          {auditResult && (
-            <div style={{ padding: '16px 24px', borderBottom: '0.5px solid #E5E7EB' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#9CA3AF', marginBottom: '2px' }}>{isZh ? '风险评分' : 'Risk score'}</div>
-                  <div style={{ fontSize: '20px', fontWeight: 600, color: '#111827' }}>{score} <span style={{ fontSize: '13px', fontWeight: 400, color: '#9CA3AF' }}>/100</span></div>
-                </div>
-                <div style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '6px', background: score > 60 ? '#FCEBEB' : score > 30 ? '#FAEEDA' : '#EAF3DE', color: score > 60 ? '#A32D2D' : score > 30 ? '#854F0B' : '#3B6D11' }}>
-                  {riskLevel}
-                </div>
-              </div>
-              <div style={{ height: '3px', background: '#F3F4F6', borderRadius: '2px', overflow: 'hidden', marginBottom: '10px' }}>
-                <div style={{ height: '100%', width: `${score}%`, borderRadius: '2px', background: score > 60 ? '#E24B4A' : score > 30 ? '#EF9F27' : '#639922' }} />
-              </div>
-              <div style={{ display: 'flex', gap: '14px' }}>
-                {[{ c: '#E24B4A', n: highCount, l: isZh ? '高' : 'High' }, { c: '#EF9F27', n: midCount, l: isZh ? '中' : 'Med' }, { c: '#639922', n: lowCount, l: isZh ? '低' : 'Low' }].map(s => (
-                  <div key={s.l} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: '#6B7280' }}>
-                    <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: s.c }} />
-                    {s.n} {s.l}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Summary */}
-          {summary && (
-            <div style={{ padding: '12px 24px', borderBottom: '0.5px solid #E5E7EB', fontSize: '12px', color: '#6B7280', lineHeight: '1.6', fontStyle: 'italic' }}>
-              "{summary}"
-            </div>
-          )}
-
-          {/* Risk list */}
-          <div style={{ padding: '14px 24px', display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '240px', overflowY: 'auto' }}>
-            {!auditResult ? (
-              <div style={{ fontSize: '13px', color: '#9CA3AF', textAlign: 'center', padding: '20px 0' }}>
-                {isZh ? 'AI 分析暂时不可用，你仍然可以继续发起。' : 'AI analysis temporarily unavailable. You may still proceed.'}
-              </div>
-            ) : risks.length === 0 ? (
-              <div style={{ fontSize: '13px', color: '#639922', textAlign: 'center', padding: '20px 0' }}>
-                {isZh ? '✓ 未发现明显风险' : '✓ No significant risks found'}
-              </div>
-            ) : risks.map((r: any, i: number) => (
-              <div key={i} style={{ border: '0.5px solid #E5E7EB', borderLeft: `2.5px solid ${RISK_COLOR[r.level] || '#E5E7EB'}`, borderRadius: '10px', padding: '12px 14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '4px', background: RISK_BG[r.level], color: RISK_TEXT[r.level] }}>
-                    {isZh ? RISK_LABEL_ZH[r.level] : RISK_LABEL_EN[r.level]}
-                  </span>
-                  <span style={{ fontSize: '13px', fontWeight: 500, color: '#111827' }}>{r.title}</span>
-                </div>
-                <div style={{ fontSize: '12px', color: '#6B7280', lineHeight: '1.5', marginBottom: '8px' }}>{r.description}</div>
-                <div style={{ fontSize: '11px', color: '#9CA3AF', lineHeight: '1.5', padding: '7px 10px', background: '#F9FAFB', borderRadius: '7px', display: 'flex', gap: '6px' }}>
-                  <span>💡</span><span>{r.suggestion}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Footer */}
-          <div style={{ ...S.footer, flexDirection: 'column' as const, display: 'flex', gap: '8px' }}>
-            <div style={{ fontSize: '11px', color: '#9CA3AF', textAlign: 'center' }}>
-              {isZh ? '你可以返回修改，或确认风险继续签名。' : 'You may revise the contract, or acknowledge the risks and proceed.'}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <button style={S.btnCancel} onClick={() => setStep('form')}>
-                {isZh ? '← 返回修改' : '← Revise'}
-              </button>
-              <button style={{ ...S.btnPrimary, opacity: isPending || isConfirming ? 0.6 : 1 }}
-                onClick={handleProceed} disabled={isPending || isConfirming}>
-                {btnLabel}
-              </button>
-            </div>
-            {error && <div style={{ fontSize: '11px', color: '#E24B4A', background: '#FCEBEB', borderRadius: '8px', padding: '8px 12px' }}>
-              {(error as any)?.shortMessage || (error as any)?.message}
-            </div>}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── STEP: SIGNING ──
   return (
-    <div style={S.wrap}>
-      <div style={{ ...S.modal, maxWidth: '360px' }}>
-        <div style={{ padding: '40px 32px', textAlign: 'center' }}>
-          <div style={{ fontSize: '32px', marginBottom: '16px' }}>{isSuccess ? '✅' : '✍️'}</div>
-          <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
-            {isSuccess ? (isZh ? '对决已上链！' : 'Duel is live!') :
-             isConfirming ? (isZh ? '链上确认中...' : 'Confirming on-chain...') :
-             (isZh ? '等待钱包签名...' : 'Waiting for wallet signature...')}
+    <div style={{position:'fixed',inset:0,background:'rgba(100,80,160,0.25)',zIndex:50,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px'}} onClick={onClose}>
+      <div style={{background:'#fff',border:'1.5px solid #EEE9FC',borderRadius:'20px',width:'100%',maxWidth:'448px',overflow:'hidden',boxShadow:'0 8px 40px rgba(124,58,237,0.10)'}} onClick={e => e.stopPropagation()}>
+        {/* HEADER */}
+        <div style={{background:'#F7F5FF',borderBottom:'1px solid #EEE9FC',padding:'14px 20px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <span style={{fontSize:'14px',fontWeight:600,color:'#1A1A2E'}}>{m.title}</span>
+          <button onClick={onClose} style={{color:'#9CA3AF',fontSize:'20px',lineHeight:1,background:'none',border:'none',cursor:'pointer'}}>×</button>
+        </div>
+
+        {/* BODY */}
+        <div style={{padding:'20px',display:'flex',flexDirection:'column',gap:'16px',maxHeight:'70vh',overflowY:'auto'}}>
+
+          {/* 你的声明 */}
+          <div>
+            <div style={{fontSize:'9px',letterSpacing:'0.1em',textTransform:'uppercase',color:'#374151',marginBottom:'6px'}}>{m.claimLabel}</div>
+            <textarea
+              value={claim}
+              onChange={e => setClaim(e.target.value)}
+              rows={3}
+              placeholder={m.claimPlaceholder}
+              style={{width:'100%',background:'#F9F8FF',border:'1.5px solid #DDD6FE',borderRadius:'12px',padding:'10px 12px',fontSize:'14px',color:'#1A1A2E',outline:'none',resize:'none',boxSizing:'border-box'}}
+            />
           </div>
-          <div style={{ fontSize: '12px', color: '#9CA3AF' }}>
-            {isSuccess ? (isZh ? '正在关闭...' : 'Closing...') : (isZh ? '请在钱包中确认交易' : 'Please confirm in your wallet')}
+
+          {/* 裁定标准 */}
+          <div>
+            <div style={{fontSize:'9px',letterSpacing:'0.1em',textTransform:'uppercase',color:'#374151',marginBottom:'6px'}}>{m.rulingLabel}</div>
+            <textarea
+              value={rule}
+              onChange={e => setRule(e.target.value)}
+              rows={2}
+              placeholder={m.rulingPlaceholder}
+              style={{width:'100%',background:'#F9F8FF',border:'1.5px solid #DDD6FE',borderRadius:'12px',padding:'10px 12px',fontSize:'14px',color:'#1A1A2E',outline:'none',resize:'none',boxSizing:'border-box'}}
+            />
           </div>
-          {error && (
-            <div style={{ marginTop: '16px', fontSize: '11px', color: '#E24B4A', background: '#FCEBEB', borderRadius: '8px', padding: '8px 12px' }}>
-              {(error as any)?.shortMessage || (error as any)?.message}
+
+          {/* Telegram 通知 */}
+          <div>
+            <div style={{fontSize:'9px',letterSpacing:'0.1em',textTransform:'uppercase',color:'#374151',marginBottom:'6px'}}>{m.tgLabel}</div>
+            <input
+              type="text"
+              value={tgUsername}
+              onChange={e => setTgUsername(e.target.value)}
+              placeholder={m.tgPlaceholder}
+              style={{width:'100%',background:'#F9F8FF',border:'1.5px solid #DDD6FE',borderRadius:'12px',padding:'10px 12px',fontSize:'14px',color:'#1A1A2E',outline:'none',boxSizing:'border-box'}}
+            />
+            <div style={{fontSize:'9px',color:'#6B7280',marginTop:'4px'}}>先给 @MemeCourt_Bot 发 /start 才能收到通知</div>
+          </div>
+
+          {/* 网络 */}
+          <div>
+            <div style={{fontSize:'9px',letterSpacing:'0.1em',textTransform:'uppercase',color:'#374151',marginBottom:'6px'}}>{m.networkLabel}</div>
+            <div style={{background:'#F9F8FF',border:'1px solid #EEE9FC',borderRadius:'12px',padding:'10px 12px',display:'flex',alignItems:'center',gap:'8px'}}>
+              <div style={{width:'8px',height:'8px',borderRadius:'50%',background:'#4ade80',flexShrink:0}} />
+              <span style={{color:'#1A1A2E',flex:1,fontSize:'14px',fontWeight:500}}>{currentNetwork}</span>
+              <span style={{color:'#9CA3AF',fontSize:'12px'}}>{currentToken}</span>
             </div>
-          )}
+          </div>
+
+          {/* 押注金额 */}
+          <div>
+            <div style={{fontSize:'9px',letterSpacing:'0.1em',textTransform:'uppercase',color:'#374151',marginBottom:'6px'}}>{m.stakeLabel}</div>
+            <div style={{display:'flex',gap:'8px'}}>
+              <input
+                type="number" min="0" step="0.001"
+                value={stake}
+                onChange={e => setStake(e.target.value)}
+                placeholder={m.stakePlaceholder}
+                style={{flex:1,background:'#F9F8FF',border:'1.5px solid #DDD6FE',borderRadius:'12px',padding:'10px 12px',fontSize:'14px',color:'#1A1A2E',outline:'none'}}
+              />
+              <div style={{background:'#F5F3FF',border:'1px solid #DDD6FE',borderRadius:'12px',padding:'10px 12px',fontSize:'14px',fontWeight:600,color:'#7C3AED',minWidth:'60px',textAlign:'center'}}>{currentToken}</div>
+            </div>
+          </div>
+
+          {/* 分配比例 */}
+          <div style={{background:'#FFFBEB',border:'1px solid #FDE68A',borderRadius:'12px',padding:'16px'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
+              <div style={{fontSize:'9px',letterSpacing:'0.1em',textTransform:'uppercase',color:'#D97706'}}>对决池分配比例</div>
+              <div style={{fontSize:'16px',fontWeight:'bold',color:'#D97706'}}>{audienceRatio}%</div>
+            </div>
+            <input type="range" min="0" max="100" step="5" value={audienceRatio} onChange={e => setAudienceRatio(Number(e.target.value))} style={{width:'100%',marginBottom:'12px',accentColor:'#7C3AED'}} />
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'12px'}}>
+              <div style={{background:'#FFF1F2',border:'1px solid #FFE4E6',borderRadius:'8px',padding:'10px',textAlign:'center'}}>
+                <div style={{fontSize:'7px',letterSpacing:'0.1em',textTransform:'uppercase',color:'#F43F5E',marginBottom:'4px'}}>赢家获得</div>
+                <div style={{fontSize:'16px',fontWeight:'bold',color:'#F43F5E'}}>{100-audienceRatio}%</div>
+                <div style={{fontSize:'8px',color:'#F43F5E'}}>对决池</div>
+              </div>
+              <div style={{background:'#EFF6FF',border:'1px solid #DBEAFE',borderRadius:'8px',padding:'10px',textAlign:'center'}}>
+                <div style={{fontSize:'7px',letterSpacing:'0.1em',textTransform:'uppercase',color:'#3B82F6',marginBottom:'4px'}}>观众瓜分</div>
+                <div style={{fontSize:'16px',fontWeight:'bold',color:'#3B82F6'}}>{audienceRatio}%</div>
+                <div style={{fontSize:'8px',color:'#3B82F6'}}>对决池</div>
+              </div>
+            </div>
+            <div style={{fontSize:'10px',color:'#9CA3AF',lineHeight:1.5,color:'#6B7280'}}>
+              {audienceRatio === 0 ? '赢家独得 100% 对决池，观众押注收益来自独立的观众池。' : audienceRatio === 100 ? '赢家放弃全部收益，100% 对决池归押对的观众瓜分。' : `赢家获得对决池的 ${100-audienceRatio}%，押对的观众瓜分 ${audienceRatio}%。`}
+            </div>
+          </div>
+
+          {/* 时长 */}
+          <div>
+            <div style={{fontSize:'9px',letterSpacing:'0.1em',textTransform:'uppercase',color:'#374151',marginBottom:'6px'}}>{m.durationLabel}</div>
+            <div style={{display:'flex',gap:'8px',marginBottom:'8px'}}>
+              <input
+                type="number" min="1" step="1"
+                value={duration}
+                onChange={e => setDuration(e.target.value)}
+                style={{flex:1,background:'#F9F8FF',border:'1.5px solid #DDD6FE',borderRadius:'12px',padding:'10px 12px',fontSize:'14px',color:'#1A1A2E',outline:'none'}}
+              />
+              <select
+                value={durationUnit}
+                onChange={e => setDurationUnit(Number(e.target.value))}
+                style={{background:'#F9F8FF',border:'1.5px solid #DDD6FE',borderRadius:'12px',padding:'10px 12px',fontSize:'14px',color:'#1A1A2E',outline:'none'}}
+              >
+                {unitLabels.map((u, i) => <option key={i} value={i}>{u}</option>)}
+              </select>
+            </div>
+            <div style={{display:'flex',gap:'8px'}}>
+              {presetDays.map((d, i) => (
+                <button
+                  key={d}
+                  onClick={() => { setDuration(String(d)); setDurationUnit(0); }}
+                  style={{flex:1,padding:'7px',borderRadius:'10px',fontSize:'11px',fontWeight:500,border: duration === String(d) && durationUnit === 0 ? '1.5px solid #7C3AED' : '1px solid #DDD6FE',background: duration === String(d) && durationUnit === 0 ? '#F5F3FF' : '#F9F8FF',color: duration === String(d) && durationUnit === 0 ? '#7C3AED' : '#6B7280',cursor:'pointer'}}
+                >{presetLabels[i]}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* 可见范围 */}
+          <div>
+            <div style={{fontSize:'9px',letterSpacing:'0.1em',textTransform:'uppercase',color:'#374151',marginBottom:'8px'}}>{m.visibilityLabel}</div>
+            <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+              {[
+                { key: 'public' as const, label: m.visibilities[0], desc: m.visibilityDescPublic },
+                { key: 'private' as const, label: m.visibilities[1], desc: m.visibilityDescPrivate },
+                { key: 'ai' as const, label: m.visibilityAI, desc: m.visibilityDescAI },
+              ].map(opt => (
+                <div
+                  key={opt.key}
+                  onClick={() => setVisibility(opt.key)}
+                  style={{borderRadius:'12px',padding:'10px 12px',cursor:'pointer',display:'flex',alignItems:'flex-start',gap:'12px',border: visibility === opt.key ? (opt.key === 'ai' ? '1.5px solid #C4B5FD' : '1.5px solid #DBEAFE') : '1px solid #EEE9FC',background: visibility === opt.key ? (opt.key === 'ai' ? '#F5F3FF' : '#EFF6FF') : '#F9F8FF'}}
+                >
+                  <div style={{width:'14px',height:'14px',borderRadius:'50%',border: visibility === opt.key ? (opt.key === 'ai' ? '2px solid #7C3AED' : '2px solid #3B82F6') : '2px solid #C4B5FD',background: visibility === opt.key ? (opt.key === 'ai' ? '#7C3AED' : '#3B82F6') : 'transparent',flexShrink:0,marginTop:'2px',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    {visibility === opt.key && <div style={{width:'6px',height:'6px',borderRadius:'50%',background:'white'}} />}
+                  </div>
+                  <div>
+                    <div style={{fontSize:'13px',fontWeight:600,color: visibility === opt.key ? (opt.key === 'ai' ? '#7C3AED' : '#1D4ED8') : '#374151',marginBottom:'3px'}}>{opt.label}</div>
+                    <div style={{fontSize:'11px',color:'#6B7280'}}>{opt.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {error && <div style={{fontSize:'11px',color:'#f87171',background:'rgba(248,113,113,0.1)',borderRadius:'8px',padding:'8px 12px'}}>Error: {(error as any)?.shortMessage || error?.message}</div>}
+        </div>
+
+        {/* FOOTER */}
+        <div style={{padding:'0 20px 20px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
+          <button onClick={onClose} style={{padding:'10px',borderRadius:'12px',fontSize:'14px',fontWeight:500,color:'#9CA3AF',border:'1px solid #E5E7EB',background:'transparent',cursor:'pointer'}}>{m.cancel}</button>
+          <button
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            style={{padding:'10px',borderRadius:'12px',fontSize:'14px',fontWeight:600,border: isSuccess ? '1px solid #A7F3D0' : '1px solid #7C3AED',background: isSuccess ? '#ECFDF5' : '#7C3AED',color: isSuccess ? '#059669' : '#fff',cursor: canSubmit ? 'pointer' : 'not-allowed',opacity: canSubmit ? 1 : 0.5}}
+          >{btnLabel}</button>
         </div>
       </div>
     </div>
   );
 }
-
 
 const LIVE_DUEL = {
   id: '0042', challenger: { name: '@CryptoKing', addr: '0x3f...a21c', color: '#6a1a1a' },
@@ -1603,57 +1388,176 @@ function DuelDetailModal({ duel, t, onClose, onChainDuel, refetch }: { duel: Due
   );
 
   // ── 视角1：招募中，旁观者/接受方 ──
-  const ViewOpenOutsider = () => (
-    <>
-      <BaseInfo />
-      <VsRow />
-      <div style={S.aiBox}><span style={{fontSize:'16px',flexShrink:0}}>⚖️</span><p style={{fontSize:'10px',color:'#7C3AED',lineHeight:1.5,margin:0}}>{t.detail?.judgeNote ?? ""}</p></div>
-      <div style={S.statRow}>
-        <StatBox label="到期" val={duel.expires} color="#D97706" />
-        <StatBox label="需押注" val={`${wager} ${token}`} />
-        <StatBox label="网络" val={duel.network} />
+  const [acceptAuditResult, setAcceptAuditResult] = useState<any>(null);
+  const [acceptAuditStep, setAcceptAuditStep] = useState<'idle'|'loading'|'report'>('idle');
+  const isZhDuel = t.nav.arena === '广场';
+
+  const doAccept = async () => {
+    const chainDuelId = (onChainDuel as any)?.originalId ?? onChainDuel?.id ?? (duel as any)._onChainId;
+    const wagerBigInt = onChainDuel?.wager ?? (duel as any)._wager;
+    const contractAddr = targetChainId === 5003
+      ? '0xE731a80668Ad0439a6B55e57f65C1D7885827566'
+      : '0xa0A997cF05F7Baf21becEA4130209fD7C7D1A994';
+    if (!chainDuelId) return;
+    if ((window as any).ethereum) {
+      try {
+        const accounts = await (window as any).ethereum.request({ method: 'eth_accounts' });
+        if (!accounts || accounts.length === 0) { openConnectModal?.(); return; }
+        const chainId = await (window as any).ethereum.request({ method: 'eth_chainId' });
+        if (parseInt(chainId, 16) !== targetChainId) {
+          await (window as any).ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x' + targetChainId.toString(16) }] });
+        }
+        const idHex = chainDuelId.toString(16).padStart(64, '0');
+        const data = '0x19b05f49' + idHex;
+        const wagerHex = '0x' + (wagerBigInt ?? BigInt(Math.round(parseFloat(wager) * 1e18))).toString(16);
+        await (window as any).ethereum.request({
+          method: 'eth_sendTransaction',
+          params: [{ from: accounts[0], to: contractAddr, value: wagerHex, data }]
+        });
+      } catch(e: any) { console.error('accept error:', e); }
+    } else if (onChainDuel) {
+      accept(oid, wager);
+    } else {
+      openConnectModal?.();
+    }
+  };
+
+  const handleAcceptClick = async () => {
+    if (!address) { openConnectModal?.(); return; }
+    if (isWrongNetwork) return;
+    // Load audit report first
+    setAcceptAuditStep('loading');
+    try {
+      const claimHash = (duel as any).claimHash || (onChainDuel as any)?.claimHash;
+      let result = null;
+      if (claimHash) {
+        const cached = await fetch(`/api/audit?claimHash=${claimHash}`);
+        if (cached.ok) { result = await cached.json(); }
+      }
+      if (!result && duel.claim) {
+        const res = await fetch('/api/audit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ claimText: duel.claim, ruleText: (duel as any).rule || '', lang: isZhDuel ? 'zh' : 'en' }),
+        });
+        if (res.ok) result = await res.json();
+      }
+      setAcceptAuditResult(result);
+    } catch { setAcceptAuditResult(null); }
+    setAcceptAuditStep('report');
+  };
+
+  const RISK_COLOR2: Record<string,string> = { high:'#E24B4A', mid:'#EF9F27', low:'#639922' };
+  const RISK_BG2: Record<string,string>    = { high:'#FCEBEB', mid:'#FAEEDA', low:'#EAF3DE' };
+  const RISK_TEXT2: Record<string,string>  = { high:'#A32D2D', mid:'#854F0B', low:'#3B6D11' };
+
+  const ViewOpenOutsider = () => {
+    if (acceptAuditStep === 'loading') return (
+      <div style={{padding:'40px 24px',textAlign:'center'}}>
+        <div style={{fontSize:'28px',marginBottom:'12px',display:'inline-block',animation:'spin 1.5s linear infinite'}}>⚖️</div>
+        <div style={{fontSize:'13px',fontWeight:600,color:'#111827',marginBottom:'4px'}}>{isZhDuel ? 'ContractAI 审查中...' : 'ContractAI analyzing...'}</div>
+        <div style={{fontSize:'11px',color:'#9CA3AF'}}>{isZhDuel ? '加载对赌协议风险报告' : 'Loading wager agreement risk report'}</div>
+        <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
       </div>
-      <div style={S.divider} />
-      <div style={S.foot}>
-        <Btn label={t.nav.arena === '广场' ? '取消' : 'Cancel'} color="#9CA3AF" bg="transparent" border="#E5E7EB" onClick={onClose} />
-        <Btn
-          label={!address ? (t.nav.arena === '广场' ? '🔗 连接钱包后参与' : '🔗 Connect Wallet') : isWrongNetwork ? (t.nav.arena === '广场' ? '⚠️ 切换网络' : '⚠️ Switch Network') : acceptSuccess ? (t.nav.arena === '广场' ? '✓ 已接受!' : '✓ Accepted!') : acceptConfirming ? (t.nav.arena === '广场' ? '确认中...' : 'Confirming...') : acceptPending ? (t.nav.arena === '广场' ? '等待签名...' : 'Signing...') : (t.nav.arena === '广场' ? '⚔️ 接受挑战' : '⚔️ Accept Challenge')}
-          color={isWrongNetwork ? '#D97706' : '#fff'} bg={isWrongNetwork ? '#FFF7ED' : '#7C3AED'} border={isWrongNetwork ? '#FDE68A' : '#7C3AED'}
-          onClick={async () => {
-            const chainDuelId = (onChainDuel as any)?.originalId ?? onChainDuel?.id ?? (duel as any)._onChainId;
-            const wagerBigInt = onChainDuel?.wager ?? (duel as any)._wager;
-            const contractAddr = targetChainId === 5003
-              ? '0xE731a80668Ad0439a6B55e57f65C1D7885827566'
-              : '0xa0A997cF05F7Baf21becEA4130209fD7C7D1A994';
-            if (!chainDuelId) return;
-            // 优先用 window.ethereum 直接调用，绕过wagmi状态问题
-            if ((window as any).ethereum) {
-              try {
-                const accounts = await (window as any).ethereum.request({ method: 'eth_accounts' });
-                if (!accounts || accounts.length === 0) { openConnectModal?.(); return; }
-                const chainId = await (window as any).ethereum.request({ method: 'eth_chainId' });
-                if (parseInt(chainId, 16) !== targetChainId) {
-                  await (window as any).ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x' + targetChainId.toString(16) }] });
-                }
-                const idHex = chainDuelId.toString(16).padStart(64, '0');
-                const data = '0x19b05f49' + idHex;
-                const wagerHex = '0x' + (wagerBigInt ?? BigInt(Math.round(parseFloat(wager) * 1e18))).toString(16);
-                await (window as any).ethereum.request({
-                  method: 'eth_sendTransaction',
-                  params: [{ from: accounts[0], to: contractAddr, value: wagerHex, data }]
-                });
-              } catch(e: any) { console.error('accept error:', e); }
-            } else if (onChainDuel) {
-              accept(oid, wager);
-            } else {
-              openConnectModal?.();
-            }
-          }}
-          disabled={acceptPending || acceptConfirming}
-        />
-      </div>
-    </>
-  );
+    );
+
+    if (acceptAuditStep === 'report') {
+      const risks = acceptAuditResult?.risks || [];
+      const score = acceptAuditResult?.overallScore ?? 0;
+      const summary = acceptAuditResult?.summary || '';
+      const highCount = risks.filter((r:any)=>r.level==='high').length;
+      const midCount  = risks.filter((r:any)=>r.level==='mid').length;
+      const lowCount  = risks.filter((r:any)=>r.level==='low').length;
+      const riskLevel = score<=30?(isZhDuel?'⚖️ 低风险':'⚖️ Low risk'):score<=60?(isZhDuel?'🔍 中等风险':'🔍 Medium risk'):score<=80?(isZhDuel?'⚠️ 高风险':'⚠️ High risk'):(isZhDuel?'🔨 极高风险':'🔨 Critical');
+      return (
+        <>
+          {/* Report header */}
+          <div style={{padding:'14px 20px',borderBottom:'0.5px solid #E5E7EB',display:'flex',alignItems:'center',gap:'10px'}}>
+            <div style={{width:'32px',height:'32px',borderRadius:'50%',border:'0.5px solid #E5E7EB',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'15px',flexShrink:0}}>⚖️</div>
+            <div>
+              <div style={{fontSize:'13px',fontWeight:600,color:'#111827'}}>{isZhDuel?'ContractAI 风险报告':'ContractAI Risk Report'}</div>
+              <div style={{fontSize:'10px',color:'#9CA3AF'}}>{isZhDuel?'接受前请阅读以下风险提示':'Please review risks before accepting'}</div>
+            </div>
+          </div>
+          {/* Score */}
+          {acceptAuditResult && (
+            <div style={{padding:'14px 20px',borderBottom:'0.5px solid #E5E7EB'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
+                <div style={{fontSize:'20px',fontWeight:600,color:'#111827'}}>{score}<span style={{fontSize:'12px',fontWeight:400,color:'#9CA3AF'}}>/100</span></div>
+                <div style={{fontSize:'11px',padding:'3px 9px',borderRadius:'5px',background:score>60?'#FCEBEB':score>30?'#FAEEDA':'#EAF3DE',color:score>60?'#A32D2D':score>30?'#854F0B':'#3B6D11'}}>{riskLevel}</div>
+              </div>
+              <div style={{height:'3px',background:'#F3F4F6',borderRadius:'2px',overflow:'hidden',marginBottom:'8px'}}>
+                <div style={{height:'100%',width:`${score}%`,borderRadius:'2px',background:score>60?'#E24B4A':score>30?'#EF9F27':'#639922'}} />
+              </div>
+              <div style={{display:'flex',gap:'12px'}}>
+                {[{c:'#E24B4A',n:highCount,l:isZhDuel?'高':'High'},{c:'#EF9F27',n:midCount,l:isZhDuel?'中':'Med'},{c:'#639922',n:lowCount,l:isZhDuel?'低':'Low'}].map(s=>(
+                  <div key={s.l} style={{display:'flex',alignItems:'center',gap:'4px',fontSize:'11px',color:'#6B7280'}}>
+                    <div style={{width:'6px',height:'6px',borderRadius:'50%',background:s.c}} />{s.n} {s.l}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Summary */}
+          {summary && <div style={{padding:'10px 20px',borderBottom:'0.5px solid #E5E7EB',fontSize:'11px',color:'#6B7280',lineHeight:'1.6',fontStyle:'italic'}}>"{summary}"</div>}
+          {/* Risk list */}
+          <div style={{padding:'12px 20px',display:'flex',flexDirection:'column',gap:'8px',maxHeight:'200px',overflowY:'auto'}}>
+            {!acceptAuditResult ? (
+              <div style={{fontSize:'12px',color:'#9CA3AF',textAlign:'center',padding:'16px 0'}}>{isZhDuel?'风险报告暂时不可用，你仍可以继续接受。':'Risk report unavailable. You may still proceed.'}</div>
+            ) : risks.length===0 ? (
+              <div style={{fontSize:'12px',color:'#639922',textAlign:'center',padding:'16px 0'}}>✓ {isZhDuel?'未发现明显风险':'No significant risks found'}</div>
+            ) : risks.map((r:any,i:number)=>(
+              <div key={i} style={{border:'0.5px solid #E5E7EB',borderLeft:`2.5px solid ${RISK_COLOR2[r.level]||'#E5E7EB'}`,borderRadius:'9px',padding:'10px 12px'}}>
+                <div style={{display:'flex',alignItems:'center',gap:'7px',marginBottom:'5px'}}>
+                  <span style={{fontSize:'10px',fontWeight:500,padding:'2px 7px',borderRadius:'4px',background:RISK_BG2[r.level],color:RISK_TEXT2[r.level]}}>{isZhDuel?{high:'高风险',mid:'中风险',low:'低风险'}[r.level]:{high:'High',mid:'Medium',low:'Low'}[r.level]}</span>
+                  <span style={{fontSize:'12px',fontWeight:500,color:'#111827'}}>{r.title}</span>
+                </div>
+                <div style={{fontSize:'11px',color:'#6B7280',lineHeight:'1.5',marginBottom:'6px'}}>{r.description}</div>
+                <div style={{fontSize:'10px',color:'#9CA3AF',padding:'6px 9px',background:'#F9FAFB',borderRadius:'6px',display:'flex',gap:'5px'}}><span>💡</span><span>{r.suggestion}</span></div>
+              </div>
+            ))}
+          </div>
+          {/* Footer */}
+          <div style={{padding:'12px 20px',borderTop:'0.5px solid #E5E7EB'}}>
+            <div style={{fontSize:'10px',color:'#9CA3AF',textAlign:'center',marginBottom:'10px'}}>{isZhDuel?'接受对决即表示你已了解以上风险。':'By accepting, you acknowledge the risks above.'}</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
+              <Btn label={isZhDuel?'← 返回':'← Back'} color='#6B7280' bg='transparent' border='#E5E7EB' onClick={()=>setAcceptAuditStep('idle')} />
+              <Btn
+                label={acceptSuccess?(isZhDuel?'✓ 已接受!':'✓ Accepted!'):acceptConfirming?(isZhDuel?'确认中...':'Confirming...'):acceptPending?(isZhDuel?'等待签名...':'Signing...'):(isZhDuel?'⚔️ 接受对决':'⚔️ Accept')}
+                color='#fff' bg='#7C3AED' border='#7C3AED'
+                onClick={doAccept}
+                disabled={acceptPending||acceptConfirming}
+              />
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    // Default: idle view
+    return (
+      <>
+        <BaseInfo />
+        <VsRow />
+        <div style={S.aiBox}><span style={{fontSize:'16px',flexShrink:0}}>⚖️</span><p style={{fontSize:'10px',color:'#7C3AED',lineHeight:1.5,margin:0}}>{t.detail?.judgeNote ?? ""}</p></div>
+        <div style={S.statRow}>
+          <StatBox label="到期" val={duel.expires} color="#D97706" />
+          <StatBox label="需押注" val={`${wager} ${token}`} />
+          <StatBox label="网络" val={duel.network} />
+        </div>
+        <div style={S.divider} />
+        <div style={S.foot}>
+          <Btn label={isZhDuel ? '取消' : 'Cancel'} color="#9CA3AF" bg="transparent" border="#E5E7EB" onClick={onClose} />
+          <Btn
+            label={!address ? (isZhDuel ? '🔗 连接钱包后参与' : '🔗 Connect Wallet') : isWrongNetwork ? (isZhDuel ? '⚠️ 切换网络' : '⚠️ Switch Network') : (isZhDuel ? '⚔️ 接受挑战' : '⚔️ Accept Challenge')}
+            color={isWrongNetwork ? '#D97706' : '#fff'} bg={isWrongNetwork ? '#FFF7ED' : '#7C3AED'} border={isWrongNetwork ? '#FDE68A' : '#7C3AED'}
+            onClick={handleAcceptClick}
+            disabled={acceptPending || acceptConfirming}
+          />
+        </div>
+      </>
+    );
+  };
 
   // ── 视角2：招募中，发起方 ──
   const ViewOpenIssuer = () => (

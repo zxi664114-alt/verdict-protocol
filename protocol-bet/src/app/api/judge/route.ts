@@ -383,12 +383,29 @@ export async function POST(req: NextRequest) {
     // Fetch public data
     const publicData = await fetchPublicData(claimText, ruleText);
 
+    // Fetch ContractAI pre-analysis (cached from when duel was created)
+    let contractAIContext = '';
+    try {
+      const auditRes = await fetch(`${KV_URL}/get/${encodeURIComponent('audit:' + claimHash)}`, {
+        headers: { Authorization: `Bearer ${KV_TOKEN}` }
+      });
+      const auditData = await auditRes.json();
+      if (auditData.result) {
+        const audit = JSON.parse(auditData.result);
+        if (audit.risks && audit.risks.length > 0) {
+          const highRisks = audit.risks.filter((r) => r.level === 'high').map((r) => r.title).join(', ');
+          const midRisks = audit.risks.filter((r) => r.level === 'mid').map((r) => r.title).join(', ');
+          contractAIContext = `\n[ContractAI Pre-Analysis — Level 3 Evidence]\nRisk score: ${audit.overallScore}/100\nSummary: ${audit.summary || ''}\nHigh risks: ${highRisks || 'none'}\nMedium risks: ${midRisks || 'none'}\nNote: These are structural risks in the agreement itself, not evidence of who won.`;
+        }
+      }
+    } catch {}
+
     // Run 4-step agent
     const [s1, s2] = await Promise.all([
       step1ParseCase(claimText, ruleText),
       step2ProcessEvidence(redEvidence, blueEvidence, 'GENERAL'),
     ]);
-    const s3 = await step3AnalyzeConditions(s1.conditions, s2.red, s2.blue, publicData, claimText, ruleText);
+    const s3 = await step3AnalyzeConditions(s1.conditions, s2.red, s2.blue, publicData + contractAIContext, claimText, ruleText);
     const s4 = await step4FinalVerdict(s1, s2, s3, claimText, ruleText);
 
     // Build final verdict
