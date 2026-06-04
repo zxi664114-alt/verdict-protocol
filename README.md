@@ -2,12 +2,13 @@
 
 # ⚖️ Verdict Protocol
 
-**The On-Chain Wager Protocol with AI Judge**
-*链上对赌协议，AI 法官裁定*
+**The On-Chain Verdict Layer — AI-Powered Arbitration Infrastructure**
+*AI 驱动的链上仲裁基础设施*
 
-[![Live](https://img.shields.io/badge/🌐_Live-verdictprotocol.online-7C3AED?style=for-the-badge)](https://www.verdictprotocol.online)
+[![Live](https://img.shields.io/badge/🌐_Live-verdictprotocol.online-0A0A0A?style=for-the-badge)](https://www.verdictprotocol.online)
 [![Mantle](https://img.shields.io/badge/Mantle_Sepolia-Deployed-00D395?style=for-the-badge&logo=ethereum)](https://sepolia.mantlescan.xyz/address/0xE731a80668Ad0439a6B55e57f65C1D7885827566)
 [![BNB](https://img.shields.io/badge/BNB_Testnet-Deployed-F0B90B?style=for-the-badge&logo=binance)](https://testnet.bscscan.com/address/0xa0A997cF05F7Baf21becEA4130209fD7C7D1A994)
+[![npm](https://img.shields.io/badge/npm-@lant1ng/verdict--protocol--sdk-CB3837?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/@lant1ng/verdict-protocol-sdk)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js)](https://nextjs.org)
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.23-363636?style=for-the-badge&logo=solidity)](https://soliditylang.org)
 [![DeepSeek](https://img.shields.io/badge/AI-DeepSeek-4A90E2?style=for-the-badge)](https://deepseek.com)
@@ -22,280 +23,306 @@
 
 ---
 
-## 🎯 What Is Verdict Protocol? | 这是什么？
+## 🎯 What Is Verdict Protocol?
 
-Verdict Protocol is an **AI-powered on-chain intelligence layer** built for real users — three products sharing one AI Judge core.
+Verdict Protocol is an **AI-powered on-chain arbitration infrastructure** — not a prediction market. It is the on-chain equivalent of a Valuation Adjustment Mechanism (VAM): a bilateral agreement between two specific parties, settled by AI Judge based on verifiable evidence.
 
-Verdict Protocol 是一套 **AI 驱动的链上智能基础层**，三个产品共享同一套 AI 法官内核。
+Four products. One AI Judge core. One closed-loop ecosystem — each product works independently, all tightly integrated.
 
 | Product | Description |
 |---------|-------------|
-| 🔌 **Chrome Extension** | Plug-in AI risk analysis on DexScreener, GMGN, four.meme, Ave.ai — any token, instantly |
-| 🤖 **Telegram Bot** [@VerdictProtocol_Bot](https://t.me/VerdictProtocol_Bot) | Wallet intelligence across ETH, BNB Chain, Mantle — /scan /compare /whale /price /mantle /watch |
-| ⚡ **Protocol Bet** | Decentralized 1v1 on-chain wager protocol — any two parties, any verifiable outcome, settled by AI Judge |
-
-**Without a trusted third party. Without counterparty risk. Settled automatically by an AI Judge.**
-*无需可信第三方，无对手方风险，由 AI 法官自动结算。*
+| ⚔️ **Protocol Bet** | Peer-to-peer on-chain wager protocol. Contract-first, ContractAI-reviewed, AI Judge-settled |
+| 🛡 **ContractAI** | AI contract risk review — embedded in every duel, also works as a standalone tool |
+| 🤖 **Telegram Bot** [@VerdictProtocol_Bot](https://t.me/VerdictProtocol_Bot) | On-chain intelligence across ETH, BNB Chain, Mantle — wallet analysis, AI verdicts, Mantle tracking, contract audit |
+| 🔌 **Chrome Extension** *(in development)* | Real-time AI risk scores on DexScreener, GMGN, four.meme, Ave.ai |
 
 ---
 
-## 🏗️ Architecture Overview | 架构总览
+## 🔄 Ecosystem Closed Loop
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                       VERDICT PROTOCOL                          │
-├──────────────┬──────────────┬────────────┬──────────────────────┤
-│  Protocol    │  AI Judge    │  TG Bot    │  Chrome Extension    │
-│  Bet dApp    │  Agent       │  @VPBot    │  (DexScreener/GMGN   │
-│  (Next.js)   │  (4-Step)    │  (Python)  │   four.meme/Ave.ai)  │
-├──────────────┴──────────────┴────────────┴──────────────────────┤
-│              Upstash KV  |  Vercel  |  DeepSeek API             │
-├─────────────────────────────────────────────────────────────────┤
-│         Mantle Sepolia  ←→  BNB Testnet  (Multi-Chain)          │
-└─────────────────────────────────────────────────────────────────┘
+Bot /audit → ContractAI scan → Protocol Bet duel creation
+                                        │
+                           ContractAI pre-acceptance review
+                                        │
+                           Evidence submission
+                                        │
+                           AI Judge 4-step arbitration
+                                        │
+                           On-chain auto-settlement
+                                        │
+                           Bot push notification
+                                        │
+                           SDK / REST API → third-party integration
 ```
 
 ---
 
-## ⚖️ Three-Layer Dispute Resolution | 三层争议解决机制
+## 🏗️ Architecture Overview
 
-| Layer | Method | Description | 描述 |
-|-------|--------|-------------|------|
-| **Layer 1** | 🤝 Mutual Settlement | Both parties agree → instant payout | 双方共识 → 直接打款 |
-| **Layer 2** | 🤖 AI Judge | Submit evidence → 4-step AI analysis → auto-settle | 提交证据 → AI 4步分析 → 自动结算 |
-| **Layer 3** | ⏰ Auto-Ruling *(Phase 2)* | Cron job rules expired duels automatically | 定时任务自动裁定过期对决 |
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                         VERDICT PROTOCOL                             │
+├──────────────┬──────────────┬──────────────┬────────────────────────┤
+│  Protocol    │  ContractAI  │  TG Bot      │  Chrome Extension      │
+│  Bet dApp    │  Risk Review │  @VPBot      │  (DexScreener/GMGN/    │
+│  (Next.js)   │  (DeepSeek)  │  (Python)    │   four.meme/Ave.ai)    │
+├──────────────┴──────────────┴──────────────┴────────────────────────┤
+│              AI Judge Agent (4-Step Chain-of-Thought)                │
+├──────────────────────────────────────────────────────────────────────┤
+│              Upstash KV  |  Vercel  |  DeepSeek API                  │
+├──────────────────────────────────────────────────────────────────────┤
+│         Mantle Sepolia  ←→  BNB Testnet  (Multi-Chain)               │
+└──────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## 🤖 AI Judge Agent | AI 法官 Agent
+## ⚔️ Protocol Bet
 
-The AI Judge is a **4-step Chain-of-Thought agent** powered by DeepSeek LLM, designed to rule on any type of dispute.
+Peer-to-peer on-chain wager protocol. Structurally equivalent to a VAM in traditional commercial agreements — permissionless, trustless, AI-arbitrated.
+
+### Contract-First Issuance
+
+Every duel starts as a structured wager agreement (§1 Claim → §8 Signatures). ContractAI automatically scans before the challenger submits and before the defender accepts — the first on-chain wager protocol with built-in pre-execution legal risk review.
+
+### Three-Layer Dispute Resolution
+
+| Layer | Method | Description |
+|-------|--------|-------------|
+| **Layer 1** | 🤝 Mutual Settlement | Both parties agree → instant payout |
+| **Layer 2** | 🤖 AI Judge | Submit evidence → 4-step reasoning → auto-settle ≥50% confidence |
+| **Layer 3** | ⏰ Auto-Ruling *(Phase 2)* | Cron job rules expired duels automatically |
+
+### Economics
+
+```
+Protocol Fee:    2% per duel
+Winner Payout:   wager × 2 × 98%
+Audience Pool:   spectators stake on either side → self-reinforcing engagement
+Dispute Window:  48 hours
+```
+
+### Contracts
+
+| Network | Address |
+|---------|---------|
+| Mantle Sepolia | `0xE731a80668Ad0439a6B55e57f65C1D7885827566` |
+| BNB Testnet | `0xa0A997cF05F7Baf21becEA4130209fD7C7D1A994` |
+
+---
+
+## 🛡 ContractAI
+
+AI contract risk review. Works in two modes:
+
+**Embedded** — throughout the Protocol Bet duel lifecycle:
+- Scans wager agreement during duel creation
+- Surfaces cached risk report when defender clicks Accept
+- Injects analysis as Level 3 evidence into AI Judge reasoning
+
+**Standalone** — accessible independently:
+- Official website: submit any contract text for instant risk report
+- Telegram Bot: `/audit <text>`
+- REST API: `POST /api/audit`
+
+**Output format:**
+```
+Risk Score: 62/100  ⚠️ Medium Risk
+🔴 High   — Ambiguous ruling standard
+🟡 Medium — Dispute window too short
+🟢 Low    — Missing notification preference
+```
+
+---
+
+## 🤖 AI Judge Agent
+
+4-step Chain-of-Thought agent powered by DeepSeek LLM.
 
 ```
 Step 1: Case Analysis      → Dispute type + verifiable conditions
-        案件解析            → 争议类型 + 可验证条件
-
-Step 2: Evidence Review    → Fetch links + credibility scoring (0-5)
-        证据审查            → 抓取链接内容 + 可信度评分（0-5）
-
+Step 2: Evidence Review    → Fetch links + credibility scoring (0–5)
 Step 3: Condition Analysis → Cross-reference evidence vs ruling standard
-        条件分析            → 证据与裁定标准交叉对比
-
 Step 4: Final Ruling       → Weighted score + confidence + auto-settle
-        最终裁定            → 加权得分 + 置信度 + 自动结算
 ```
 
-**Evidence Credibility Hierarchy | 证据可信度分级:**
+**Evidence Credibility:**
 ```
-Level 5 ██████  On-chain transaction data | 链上交易数据
-Level 4 █████░  Official announcements    | 官方公告
-Level 3 ████░░  3rd-party data (CoinGecko, DeFiLlama) | 第三方数据
-Level 2 ███░░░  Social media links        | 社交媒体链接
-Level 1 ██░░░░  Text description only     | 纯文字描述
-Level 0 ░░░░░░  Subjective claims → IGNORED | 主观声明 → 忽略
-```
-
-> Auto-settles on-chain when confidence ≥ 50%. Returns `Insufficient` when evidence is too weak.
-> 置信度 ≥ 50% 时自动链上结算，证据不足时返回「证据不足」。
-
----
-
-## 🔗 Smart Contract | 智能合约
-
-### Deployments | 部署信息
-
-| Network | Address | Explorer |
-|---------|---------|----------|
-| Mantle Sepolia | `0xE731a80668Ad0439a6B55e57f65C1D7885827566` | [View ↗](https://sepolia.mantlescan.xyz/address/0xE731a80668Ad0439a6B55e57f65C1D7885827566) |
-| BNB Testnet | `0xa0A997cF05F7Baf21becEA4130209fD7C7D1A994` | [View ↗](https://testnet.bscscan.com/address/0xa0A997cF05F7Baf21becEA4130209fD7C7D1A994) |
-
-### Core Functions | 核心函数
-
-```solidity
-// Create a new duel | 发起对决
-function createDuel(bytes32 claimHash, bytes32 ruleHash, address token,
-                    uint256 wager, uint64 deadline, Vis vis, uint16 audioBps) external payable
-
-// Accept a challenge | 接受挑战
-function accept(uint256 id) external payable
-
-// Layer 1: Mutual settlement | 第一层：共识结算
-function mutualSettle(uint256 id, Side claimedWinner) external
-
-// Layer 2/3: Judge settles | 第二/三层：法官结算
-function settle(uint256 id, Side winner) external  // onlyJudge
-
-// Cancel unmatched duel (refund) | 取消未匹配对决（退款）
-function cancel(uint256 id) external
-```
-
-### Economics | 经济模型
-
-```
-Protocol Fee:   2% (200 BPS)     协议手续费：2%
-Winner Payout:  wager × 2 × 98%  胜方获得：押注 × 2 × 98%
-Dispute Window: 48 hours          争议窗口：48 小时
+Level 5  On-chain transaction data
+Level 4  Official announcements
+Level 3  3rd-party data (CoinGecko, DeFiLlama) + ContractAI analysis
+Level 2  Social media links
+Level 1  Text description only
+Level 0  Subjective claims → IGNORED
 ```
 
 ---
 
-## 🛠️ Tech Stack | 技术栈
+## 🤖 Telegram Bot Commands
 
-<table>
-<tr>
-<td>
+**[@VerdictProtocol_Bot](https://t.me/VerdictProtocol_Bot)**
 
-**Frontend | 前端**
-- Next.js 16 (Turbopack)
-- React 19 + TypeScript
-- wagmi + RainbowKit + viem
-- Tailwind CSS
-
-</td>
-<td>
-
-**Backend | 后端**
-- Vercel (API Routes)
-- Upstash KV (Redis)
-- DeepSeek API (AI Judge)
-- Moralis API (Wallet data)
-
-</td>
-<td>
-
-**Contract | 合约**
-- Solidity 0.8.23
-- Mantle Sepolia
-- BNB Testnet
-
-</td>
-<td>
-
-**Bot | 机器人**
-- Python 3.x
-- python-telegram-bot 20.7
-- aiohttp
-- Railway (hosting)
-
-</td>
-</tr>
-</table>
+| Command | Description |
+|---------|-------------|
+| `/scan <address> [chain]` | AI wallet analysis — USD holdings, risk rating (⚖️ ACQUITTED → 🔨 CONDEMNED) |
+| `/compare <addr1> <addr2>` | Head-to-head AI verdict with scoring |
+| `/audit <text>` | ContractAI contract risk analysis |
+| `/alert on\|off\|status` | Mantle ecosystem alerts (TVL ≥5% or MNT ≥8%) |
+| `/mantle` | Live Mantle data — TVL, top protocols, gas, MNT price |
+| `/price <token>` | Real-time price + 24h change |
+| `/whale [chain]` | Large wallet activity tracker |
+| `/watch <address>` | Monitor wallet + duel alerts |
 
 ---
 
-## 📁 Repository Structure | 仓库结构
+## 📦 SDK
+
+```bash
+npm install @lant1ng/verdict-protocol-sdk
+```
+
+```typescript
+import { VerdictClient } from '@lant1ng/verdict-protocol-sdk'
+
+const client = new VerdictClient({ chainId: 5003, walletClient })
+
+const duelId = await client.createDuel({
+  claim: 'BTC will exceed $150K by Dec 31, 2026',
+  rule: 'CoinGecko closing price on deadline date',
+  durationDays: 30,
+  wagerEth: '0.1',
+  visibility: 'public',
+})
+
+await client.submitEvidence({ duelId, description: '...', links: ['https://...'] })
+await client.claimReward({ duelId })
+```
+
+**Methods:** `createDuel` · `acceptDuel` · `placeBet` · `submitEvidence` · `claimReward` · `cancelDuel` · `getDuel` · `getVerdict` · `listDuels`
+
+📦 [npmjs.com/package/@lant1ng/verdict-protocol-sdk](https://www.npmjs.com/package/@lant1ng/verdict-protocol-sdk)
+
+---
+
+## 🌐 REST API
+
+Base URL: `https://verdictprotocol.online`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/audit` | ContractAI — analyze contract risk |
+| `GET`  | `/api/audit?claimHash=` | Retrieve cached risk report |
+| `POST` | `/api/judge` | Trigger AI Judge arbitration |
+| `GET`  | `/api/judge?chainId=&duelId=` | Retrieve cached verdict |
+| `POST` | `/api/claim` | Persist claim & rule text |
+| `GET`  | `/api/claim?claimHash=` | Retrieve claim text |
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Stack |
+|-------|-------|
+| **Frontend** | Next.js 16, React 19, TypeScript, wagmi, RainbowKit, viem, Tailwind CSS |
+| **Backend** | Vercel API Routes, Upstash Redis, DeepSeek API, Moralis API |
+| **Contract** | Solidity 0.8.23, Mantle Sepolia, BNB Testnet |
+| **Bot** | Python 3.x, python-telegram-bot 20.7, aiohttp, Railway |
+| **SDK** | TypeScript, CJS + ESM, published to npm |
+
+---
+
+## 📁 Repository Structure
 
 ```
 verdict-protocol/
-├── protocol-bet/                      # Main Next.js dApp | 主应用
+├── protocol-bet/
 │   ├── src/app/
-│   │   ├── page_client.tsx            # Main UI | 主界面
-│   │   ├── verdict/[chainId]/[duelId] # AI Ruling detail page | 裁定详情页
+│   │   ├── page_client.tsx
+│   │   ├── verdict/[chainId]/[duelId]/
 │   │   └── api/
-│   │       ├── duels/route.ts         # Multi-chain duel fetcher | 多链对决拉取
-│   │       ├── evidence/route.ts      # Evidence storage | 证据存储
-│   │       ├── judge/route.ts         # AI 4-step agent | AI 4步 Agent
-│   │       └── notify/route.ts        # TG notifications | TG 通知
+│   │       ├── audit/route.ts         # ContractAI
+│   │       ├── judge/route.ts         # AI Judge
+│   │       ├── claim/route.ts
+│   │       ├── duels/route.ts
+│   │       ├── evidence/route.ts
+│   │       └── notify/route.ts
 │   └── src/lib/
-│       ├── contract.ts                # Contract addresses + ABI
-│       └── hooks.ts                   # wagmi hooks
-├── bot/                               # Telegram Bot | TG 机器人
-│   ├── bot.py
-│   └── requirements.txt
-├── extension/                         # Chrome Extension | 浏览器插件
-├── packages/
-│   └── sdk/                           # @verdict-protocol/sdk (WIP)
-├── .gitignore
-├── LICENSE
+│       ├── contract.ts
+│       └── hooks.ts
+├── bot/bot.py
+├── extension/                         # Chrome Extension (in development)
+├── packages/sdk/                      # @lant1ng/verdict-protocol-sdk
+├── docs/
 └── README.md
 ```
 
 ---
 
-## 🚀 Quick Start | 快速开始
-
-### Run dApp locally | 本地运行
+## 🚀 Quick Start
 
 ```bash
 git clone https://github.com/lant1ng-1216/verdict-protocol
 cd verdict-protocol/protocol-bet
 npm install
-cp .env.example .env.local  # Add your env vars
+cp .env.example .env.local
 npm run dev
 ```
-
-### Environment Variables | 环境变量
 
 ```env
 KV_REST_API_URL=        # Upstash Redis URL
 KV_REST_API_TOKEN=      # Upstash token
 DEEPSEEK_API_KEY=       # DeepSeek API key
-JUDGE_PRIVATE_KEY=      # Judge wallet private key (for auto-settle)
+JUDGE_PRIVATE_KEY=      # Judge wallet private key
 TELEGRAM_BOT_TOKEN=     # Telegram bot token
 ```
 
-### Run Telegram Bot | 运行 TG Bot
-
-```bash
-cd bot
-pip install -r requirements.txt
-python bot.py
-```
-
 ---
 
-## 🤖 Telegram Bot Commands | TG 机器人指令
+## 🗺️ Roadmap
 
-**[@VerdictProtocol_Bot](https://t.me/VerdictProtocol_Bot)**
+### ✅ Phase 1 — Testnet (Current)
+- [x] Smart contracts — Mantle Sepolia + BNB Testnet
+- [x] Full dApp — sidebar layout, bilingual, contract-first issuance
+- [x] ContractAI — embedded risk review + standalone tool
+- [x] AI Judge — 4-step chain-of-thought, auto-settle
+- [x] Three-layer dispute resolution
+- [x] Telegram Bot — 8 commands including /audit and /alert
+- [x] npm SDK — @lant1ng/verdict-protocol-sdk
+- [x] REST API — /api/audit /api/judge /api/claim
+- [x] Chrome Extension (in development)
 
-| Command | Description | 功能 |
-|---------|-------------|------|
-| `/scan <address>` | AI wallet analysis | AI 钱包分析 |
-| `/compare <addr1> <addr2>` | Head-to-head comparison | 双钱包对比 |
-| `/whale [bnb\|mantle]` | Whale activity tracker | 巨鲸追踪 |
-| `/price <token>` | Token price + 24h change | 代币价格 |
-| `/mantle` | Mantle ecosystem live data | Mantle 生态数据 |
-| `/watch <address>` | Watch wallet + duel alerts | 监控钱包 + 对决通知 |
-
----
-
-## 🗺️ Roadmap | 路线图
-
-### ✅ Phase 1 — Testnet (Current | 当前)
-- [x] Smart contract deployed (Mantle Sepolia + BNB Testnet)
-- [x] Full dApp UI with bilingual support
-- [x] Chrome Extension (DexScreener / GMGN / four.meme / Ave.ai)
-- [x] Layer 1: Mutual settlement
-- [x] Layer 2: Evidence + AI 4-step judge agent
-- [x] AI verdict detail page
-- [x] Telegram Bot (6 core commands, multi-chain)
-- [x] Share cards, BeamAvatar, Prize Pool USD display
-
-### 🔨 Phase 1.5 — Verdict Score (Next | 下一版本)
-- [ ] KOL on-chain credit scoring system
-- [ ] Anyone can submit a KOL prediction as on-chain evidence (timestamped)
-- [ ] AI Judge auto-rules on expiry — result permanently on-chain
-- [ ] Public score page per KOL / address: accuracy rate, confidence calibration, time dimension
-- [ ] Bot command: `/score @KOL` or `/score <address>`
-
-### 📋 Phase 2 — Mainnet
+### 🔨 Phase 2 — Mainnet
 - [ ] Mainnet deployment (Mantle + BNB Chain)
-- [ ] Layer 3: Cron-based auto-ruling
-- [ ] Audience pool (spectator betting)
-- [ ] TG account binding
-- [ ] Image / PDF evidence upload
-- [ ] ERC20 token support as wager currency
+- [ ] Layer 3: Auto-ruling cron job
+- [ ] Audience pool activation
+- [ ] ERC20 token wager support
+- [ ] Bot subscription tiers (freemium → paid)
 
 ### 📋 Phase 3 — Expansion
-- [ ] `@verdict-protocol/sdk` — npm SDK for third-party dApp integration
-- [ ] REST API — open AI Judge as callable infrastructure
-- [ ] Multi-chain expansion (Arbitrum, Base, Optimism)
+- [ ] ContractAI paid deep reports + B2B API
+- [ ] Multi-chain (Arbitrum, Base, Optimism)
 - [ ] VERDICT governance token
 - [ ] Mobile app
 
 ---
 
-## 💡 Use Cases | 使用场景
+## ⚡ Competitive Advantage
+
+| | Verdict Protocol | Polymarket | Augur |
+|--|:--:|:--:|:--:|
+| Peer-to-peer bilateral wager | ✅ | ❌ | ❌ |
+| Any verifiable topic | ✅ | ❌ | ❌ |
+| AI Judge (evidence-based) | ✅ | ❌ | ❌ |
+| Built-in contract risk review | ✅ | ❌ | ❌ |
+| No centralized arbitrator | ✅ | ❌ | ✅ |
+| Open SDK + REST API | ✅ | ❌ | ❌ |
+| Telegram Bot integration | ✅ | ❌ | ❌ |
+| Trustless on-chain settlement | ✅ | ✅ | ✅ |
+
+---
+
+## 💡 Use Cases
 
 ```
 🪙 Crypto       "BTC will hit $150K by EOY"
@@ -303,29 +330,15 @@ python bot.py
 🏘️ Community    "Mantle TVL will surpass Arbitrum by Q3"
 🏢 Business     "Our product will ship before yours"
 👫 Personal     "I'll lose 20 lbs before you finish your book"
+📄 VAM          "Revenue milestone agreement between founders and investors"
 ```
 
 ---
 
-## ⚡ Competitive Advantage | 竞争优势
+## 🏆 Milestones
 
-| | Verdict Protocol | Polymarket | Augur |
-|--|:--:|:--:|:--:|
-| Any topic (not just markets) | ✅ | ❌ | ❌ |
-| Peer-to-peer 1v1 | ✅ | ❌ | ❌ |
-| AI Judge | ✅ | ❌ | ❌ |
-| No centralized arbitrator | ✅ | ❌ | ✅ |
-| Social / personal bets | ✅ | ❌ | ❌ |
-| TG Bot integration | ✅ | ❌ | ❌ |
-| Chrome Extension | ✅ | ❌ | ❌ |
-| Trustless settlement | ✅ | ✅ | ✅ |
-
----
-
-## 🏆 Milestones | 里程碑
-
-- 🥇 **four.meme AI Sprint** — Top 10 finalist out of 196 projects, Community Award
-- 🔨 **Mantle Hackathon 2026** — Protocol Bet deployed on Mantle Sepolia
+- 🥇 **four.meme AI Sprint** — Top 10 finalist (196 projects), Community Award
+- 🔨 **Mantle Turing Test Hackathon Phase II** — Protocol Bet + AI Alpha & Data tracks
 
 ---
 
@@ -337,10 +350,11 @@ MIT License — see [LICENSE](./LICENSE)
 
 <div align="center">
 
-**Built for Mantle Hackathon 2026**
+**Built for Mantle Turing Test Hackathon**
 
-[![Website](https://img.shields.io/badge/🌐_Website-verdictprotocol.online-7C3AED?style=for-the-badge)](https://www.verdictprotocol.online)
+[![Website](https://img.shields.io/badge/🌐_Website-verdictprotocol.online-0A0A0A?style=for-the-badge)](https://www.verdictprotocol.online)
 [![Telegram](https://img.shields.io/badge/💬_Bot-@VerdictProtocol__Bot-26A5E4?style=for-the-badge)](https://t.me/VerdictProtocol_Bot)
+[![npm](https://img.shields.io/badge/📦_SDK-@lant1ng/verdict--protocol--sdk-CB3837?style=for-the-badge)](https://www.npmjs.com/package/@lant1ng/verdict-protocol-sdk)
 [![Twitter](https://img.shields.io/badge/🐦_Twitter-@yundan1216-1DA1F2?style=for-the-badge)](https://x.com/yundan1216)
 [![DoraHacks](https://img.shields.io/badge/🏆_DoraHacks-Submission-FF6B35?style=for-the-badge)](https://dorahacks.io/buidl/29128)
 
