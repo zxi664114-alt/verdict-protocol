@@ -545,7 +545,7 @@ type Lang = 'en' | 'zh';
 type DuelType = 'kolBattle' | 'friendsBet' | 'communityWar' | 'personalChallenge';
 type Rarity = 'legendary' | 'rare' | 'common';
 type Status = 'live' | 'open' | 'ending' | 'new';
-type Page = 'arena' | 'myDuels';
+type Page = 'arena' | 'myDuels' | 'contractai';
 type MyDuelTab = 'active' | 'claimable' | 'history';
 
 interface Duel {
@@ -2596,26 +2596,152 @@ function MyDuelsPage({ t, onGoToArena, onChainDuels, chainId, onViewDuel }: { t:
 }
 
 // ─── NAVBAR ───────────────────────────────────────────────────────────────────
+// ─── CONTRACT AI PAGE ─────────────────────────────────────────────────────────
+function ContractAIPage({ onSwitch, walletAddress }: { onSwitch: (p: Page) => void; walletAddress?: string }) {
+  const [open, setOpen] = useState(false);
+  const iframeSrc = walletAddress
+    ? `https://contractai-black.vercel.app?wallet=${encodeURIComponent(walletAddress)}&from=protocol-bet`
+    : 'https://contractai-black.vercel.app?from=protocol-bet';
+
+  const products = [
+    { id: 'arena' as Page, icon: '⚔️', name: 'Protocol Bet', active: true },
+    { id: 'contractai' as Page, icon: '🛡', name: 'ContractAI', active: true },
+    { id: null, icon: '🤖', name: 'AI Agent', active: false },
+    { id: null, icon: '📊', name: 'KOL Score', active: false },
+    { id: null, icon: '🔗', name: 'SDK Playground', active: false },
+  ];
+
+  return (
+    <div style={{position:'fixed',inset:0,zIndex:50,background:'#fff'}}>
+      <iframe
+        src={iframeSrc}
+        style={{width:'100%',height:'100%',border:'none'}}
+        allow="clipboard-write"
+      />
+      {/* Product switcher overlay */}
+      <div style={{position:'absolute',top:'18px',left:'135px',zIndex:51}}>
+        <button
+          onClick={() => setOpen(o => !o)}
+          title="Switch product"
+          style={{width:'22px',height:'22px',borderRadius:'50%',background:'rgba(255,255,255,0.95)',border:'0.5px solid #D0D0D0',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 1px 4px rgba(0,0,0,0.1)',backdropFilter:'blur(8px)',padding:0}}
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <rect x="1" y="1" width="4" height="4" rx="0.8" fill="#555"/>
+            <rect x="7" y="1" width="4" height="4" rx="0.8" fill="#555"/>
+            <rect x="1" y="7" width="4" height="4" rx="0.8" fill="#555"/>
+            <rect x="7" y="7" width="4" height="4" rx="0.8" fill="#555"/>
+          </svg>
+        </button>
+        {open && (
+          <>
+            <div style={{position:'fixed',inset:0,zIndex:-1}} onClick={() => setOpen(false)} />
+            <div style={{position:'absolute',top:'calc(100% + 6px)',left:'-8px',width:'200px',background:'#fff',border:'0.5px solid #F0F0F0',borderRadius:'10px',boxShadow:'0 4px 20px rgba(0,0,0,0.1)',overflow:'hidden'}}>
+              {products.map((p, i) => (
+                <button key={i}
+                  onClick={() => { if (p.active && p.id) { onSwitch(p.id); setOpen(false); } }}
+                  style={{width:'100%',display:'flex',alignItems:'center',gap:'10px',padding:'9px 12px',border:'none',borderBottom:i<products.length-1?'0.5px solid #F5F5F5':'none',cursor:p.active?'pointer':'default',background:p.id==='contractai'?'#F5F5F5':'#fff',transition:'background .1s'}}
+                  onMouseEnter={e=>{if(p.active)(e.currentTarget as HTMLElement).style.background='#F5F5F5'}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background=p.id==='contractai'?'#F5F5F5':'#fff'}}
+                >
+                  <span style={{fontSize:'15px'}}>{p.icon}</span>
+                  <span style={{fontSize:'12px',fontWeight:500,color:p.active?'#0A0A0A':'#BBBBBB',flex:1,textAlign:'left'}}>{p.name}</span>
+                  {!p.active && <span style={{fontSize:'9px',color:'#BBBBBB',background:'#F5F5F5',border:'0.5px solid #E0E0E0',borderRadius:'4px',padding:'1px 5px'}}>Soon</span>}
+                  {p.id==='contractai' && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#0A0A0A" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+// ─── PRODUCT SWITCHER ─────────────────────────────────────────────────────────
+function ProductSwitcher({ activePage, onPageChange }: { activePage: Page; onPageChange: (p: Page) => void }) {
+  const [open, setOpen] = useState(false);
+
+  const products = [
+    { id: 'arena' as Page, icon: '⚔️', name: 'Protocol Bet', sub: 'On-chain wager protocol', active: true },
+    { id: 'contractai' as Page, icon: '🛡', name: 'ContractAI', sub: 'AI contract review', active: true },
+    { id: null, icon: '🤖', name: 'AI Agent', sub: 'Coming soon', active: false },
+    { id: null, icon: '📊', name: 'KOL Score', sub: 'Coming soon', active: false },
+    { id: null, icon: '🔗', name: 'SDK Playground', sub: 'Coming soon', active: false },
+  ];
+
+  const current = activePage === 'contractai'
+    ? { icon: '🛡', name: 'ContractAI' }
+    : { icon: '⚔️', name: 'Protocol Bet' };
+
+  return (
+    <div style={{position:'relative'}}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{display:'flex',alignItems:'center',gap:'8px',width:'100%',background:'transparent',border:'none',cursor:'pointer',padding:'2px 0'}}
+      >
+        <img src="/verdict_logo.svg" alt="logo" style={{width:'30px',height:'30px',objectFit:'contain',flexShrink:0}} />
+        <span style={{fontSize:'13px',fontWeight:600,color:'#0A0A0A',letterSpacing:'-0.2px',flex:1,textAlign:'left'}}>{current.name}</span>
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{flexShrink:0,transition:'transform .15s',transform:open?'rotate(180deg)':'rotate(0deg)'}}>
+          <path d="M2 4l4 4 4-4" stroke="#999999" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+
+      {open && (
+        <>
+          <div style={{position:'fixed',inset:0,zIndex:49}} onClick={() => setOpen(false)} />
+          <div style={{position:'absolute',top:'calc(100% + 8px)',left:0,right:0,background:'#FFFFFF',border:'0.5px solid #F0F0F0',borderRadius:'10px',boxShadow:'0 4px 24px rgba(0,0,0,0.08)',zIndex:50,overflow:'hidden'}}>
+            {products.map((p, i) => (
+              <button
+                key={i}
+                onClick={() => { if (p.active && p.id) { onPageChange(p.id); setOpen(false); } }}
+                style={{
+                  width:'100%',display:'flex',alignItems:'center',gap:'10px',
+                  padding:'10px 12px',border:'none',cursor:p.active?'pointer':'default',
+                  background: (p.id === 'arena' && (activePage === 'arena' || activePage === 'myDuels')) || p.id === activePage ? '#F5F5F5' : '#FFFFFF',
+                  transition:'background .1s',borderBottom:i < products.length-1?'0.5px solid #F5F5F5':'none',
+                }}
+                onMouseEnter={e => { if(p.active) (e.currentTarget as HTMLElement).style.background = '#F5F5F5'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = (p.id === 'arena' && (activePage === 'arena' || activePage === 'myDuels')) || p.id === activePage ? '#F5F5F5' : '#FFFFFF'; }}
+              >
+                <span style={{fontSize:'16px',flexShrink:0}}>{p.icon}</span>
+                <div style={{flex:1,textAlign:'left'}}>
+                  <div style={{fontSize:'12px',fontWeight:500,color:p.active?'#0A0A0A':'#BBBBBB'}}>{p.name}</div>
+                  <div style={{fontSize:'10px',color:'#999999'}}>{p.sub}</div>
+                </div>
+                {!p.active && <span style={{fontSize:'9px',color:'#BBBBBB',background:'#F5F5F5',border:'0.5px solid #E0E0E0',borderRadius:'4px',padding:'1px 5px'}}>Soon</span>}
+                {p.active && ((p.id === 'arena' && (activePage === 'arena' || activePage === 'myDuels')) || p.id === activePage) && (
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#0A0A0A" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                )}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+
 function NavBar({ t, lang, activePage, onPageChange, onLangToggle, onIssueClick }: { t: typeof LANG['en']; lang: Lang; activePage: Page; onPageChange: (p: Page) => void; onLangToggle: () => void; onIssueClick: () => void }) {
   return (
     <div style={{position:'fixed',left:0,top:0,bottom:0,width:'200px',background:'#FFFFFF',borderRight:'0.5px solid #EBEBEB',display:'flex',flexDirection:'column',zIndex:40}}>
-      <div style={{padding:'24px 20px 20px',borderBottom:'0.5px solid #F5F5F5'}}>
-        <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-          <img src="/verdict_logo.svg" alt="logo" style={{width:'36px',height:'36px',objectFit:'contain'}} />
-          <span style={{fontSize:'13px',fontWeight:600,color:'#0A0A0A',letterSpacing:'-0.2px'}}>Protocol Bet</span>
+      <div style={{padding:'20px 16px 16px',borderBottom:'0.5px solid #F5F5F5'}}>
+        <ProductSwitcher activePage={activePage} onPageChange={onPageChange} />
+      </div>
+      {activePage !== 'contractai' && (
+        <div style={{padding:'12px',display:'flex',flexDirection:'column',gap:'2px'}}>
+          {([['arena', t.nav.arena], ['myDuels', t.nav.myDuels]] as [Page, string][]).map(([key, label]) => (
+            <button key={key} onClick={() => onPageChange(key)} style={{display:'flex',alignItems:'center',gap:'8px',padding:'8px 10px',borderRadius:'6px',border:'none',cursor:'pointer',background:activePage===key?'#F5F5F5':'transparent',color:activePage===key?'#0A0A0A':'#999999',fontSize:'13px',fontWeight:activePage===key?500:400,textAlign:'left',width:'100%',transition:'all .12s'}}>
+              {key === 'arena'
+                ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+              }
+              {label}
+            </button>
+          ))}
         </div>
-      </div>
-      <div style={{padding:'12px',display:'flex',flexDirection:'column',gap:'2px'}}>
-        {([['arena', t.nav.arena], ['myDuels', t.nav.myDuels]] as [Page, string][]).map(([key, label]) => (
-          <button key={key} onClick={() => onPageChange(key)} style={{display:'flex',alignItems:'center',gap:'8px',padding:'8px 10px',borderRadius:'6px',border:'none',cursor:'pointer',background:activePage===key?'#F5F5F5':'transparent',color:activePage===key?'#0A0A0A':'#999999',fontSize:'13px',fontWeight:activePage===key?500:400,textAlign:'left',width:'100%',transition:'all .12s'}}>
-            {key === 'arena'
-              ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-              : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-            }
-            {label}
-          </button>
-        ))}
-      </div>
+      )}
       <div style={{flex:1}} />
       <div style={{padding:'16px 12px',borderTop:'0.5px solid #F5F5F5',display:'flex',flexDirection:'column',gap:'8px'}}>
         <button onClick={onIssueClick} style={{width:'100%',padding:'9px 12px',background:'#0A0A0A',color:'#fff',border:'none',borderRadius:'6px',fontSize:'12px',fontWeight:500,cursor:'pointer',transition:'opacity .12s'}} onMouseEnter={e=>(e.currentTarget.style.opacity='0.85')} onMouseLeave={e=>(e.currentTarget.style.opacity='1')} onMouseDown={e=>(e.currentTarget.style.transform='scale(0.98)')} onMouseUp={e=>(e.currentTarget.style.transform='scale(1)')}>
@@ -2651,6 +2777,7 @@ function NavBar({ t, lang, activePage, onPageChange, onLangToggle, onIssueClick 
 // ─── HOME ─────────────────────────────────────────────────────────────────────
 // AppInner 包含所有wagmi hooks，必须在WagmiProvider内部渲染
 function AppInner() {
+  const { address } = useAccount();
   const [lang, setLang] = useState<Lang>('en');
   const [activePage, setActivePage] = useState<Page>('arena');
   const [activeFilter, setActiveFilter] = useState(0);
@@ -2830,6 +2957,9 @@ function AppInner() {
 .duel-card-grid > *:nth-child(6) { animation-delay: 0.30s; }
 `}</style>
       <NavBar t={t} lang={lang} activePage={activePage} onPageChange={setActivePage} onLangToggle={() => setLang(l => l === 'en' ? 'zh' : 'en')} onIssueClick={() => setShowModal(true)} />
+      {activePage === 'contractai' ? (
+        <ContractAIPage onSwitch={setActivePage} walletAddress={address} />
+      ) : (
       <div style={{marginLeft:'200px',flex:1,minWidth:0}}>
       {activePage === 'arena' ? (
         <>
@@ -2878,6 +3008,7 @@ function AppInner() {
         }} />
       )}
       </div>
+      )}
       {showModal && <IssueModal t={t} onClose={() => { setShowModal(false); refetch(); }} chainId={chainId} />}
       {selectedDuel && <DuelModal duel={selectedDuel} t={t} refetch={refetch} onClose={() => {
         setSelectedDuel(null);
